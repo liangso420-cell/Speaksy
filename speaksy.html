@@ -1,0 +1,2043 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Speaksy</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+ 
+<!-- React (sin necesidad de instalar nada) -->
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+ 
+<!-- Firebase (SDK compat: pensado para usarse directo con <script>, sin backend propio) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+ 
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+ 
+<script type="text/plain" id="app-source">
+const { useState, useEffect, useRef } = React;
+ 
+/* =========================================================
+   1) CONFIGURACIÓN DE FIREBASE — reemplaza esto con lo tuyo
+   (Consola de Firebase > Configuración del proyecto > tus apps > SDK setup)
+   Estas claves NO son secretas: es normal y seguro que estén en el HTML.
+   La seguridad real la dan las Reglas de Firestore (ver notas al final).
+========================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyAXiz5267XoHKtnw4fNYpzsAk_i8oP-Dkk",
+  authDomain: "speaksy-9c32d.firebaseapp.com",
+  projectId: "speaksy-9c32d",
+  storageBucket: "speaksy-9c32d.firebasestorage.app",
+  messagingSenderId: "147378306428",
+  appId: "1:147378306428:web:8a90af3c1e214268b678f9",
+};
+ 
+let firebaseOk = false;
+try {
+  firebase.initializeApp(firebaseConfig);
+  firebaseOk = firebaseConfig.apiKey !== "TU_API_KEY";
+} catch (e) {
+  console.error("Error inicializando Firebase:", e);
+}
+const auth = firebaseOk ? firebase.auth() : null;
+const db = firebaseOk ? firebase.firestore() : null;
+ 
+// URL de tu Cloud Function de análisis de pronunciación (ver functions/index.js
+// y STATUS.md). Queda vacía hasta que despliegues la función; mientras tanto
+// el botón de "Análisis de pronunciación (beta)" se muestra desactivado.
+const FUNCTIONS_URL = "https://us-central1-speaksy-9c32d.cloudfunctions.net/assessPronunciation";
+ 
+/* ---------------------- Diseño / tokens ---------------------- */
+const colors = {
+  ink: "#16302B", inkSoft: "#4B615C", canvas: "#F5F8F6", card: "#FFFFFF",
+  teal: "#1F5C52", tealDark: "#123832", mint: "#DCECE6", mintSoft: "#EDF5F2",
+  amber: "#E3A34E", amberSoft: "#FBEAD2", border: "#DCE6E2", danger: "#B3452F",
+};
+const font = "Inter, sans-serif", display = "Fraunces, serif", mono = "'IBM Plex Mono', monospace";
+ 
+function Card({ children, style }) {
+  return <div style={{ background: colors.card, border: `1px solid ${colors.border}`, borderRadius: 20, padding: 24, ...style }}>{children}</div>;
+}
+function PrimaryButton({ children, onClick, style, disabled }) {
+  return (
+    <button disabled={disabled} onClick={onClick} style={{
+      background: disabled ? "#9CB8B2" : colors.teal, color: "#fff", border: "none", borderRadius: 999,
+      padding: "13px 26px", fontSize: 15, fontWeight: 600, fontFamily: font,
+      cursor: disabled ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8, ...style,
+    }}>{children}</button>
+  );
+}
+function GhostButton({ children, onClick, style }) {
+  return (
+    <button onClick={onClick} style={{
+      background: "transparent", color: colors.teal, border: `1.5px solid ${colors.teal}`, borderRadius: 999,
+      padding: "12px 24px", fontSize: 15, fontWeight: 600, fontFamily: font, cursor: "pointer",
+      display: "inline-flex", alignItems: "center", gap: 8, ...style,
+    }}>{children}</button>
+  );
+}
+function Note({ children, tone = "mint" }) {
+  const bg = tone === "danger" ? "#FBEAE5" : colors.mintSoft;
+  const fg = tone === "danger" ? colors.danger : colors.inkSoft;
+  return <div style={{ background: bg, border: `1px solid ${colors.border}`, borderRadius: 14, padding: "12px 14px", fontSize: 13.5, color: fg, fontFamily: font, lineHeight: 1.5 }}>{children}</div>;
+}
+function Pill({ children }) {
+  return (
+    <span style={{
+      background: colors.mintSoft, color: colors.teal, fontFamily: font, fontSize: 12.5,
+      fontWeight: 600, padding: "5px 12px", borderRadius: 999, display: "inline-block",
+    }}>{children}</span>
+  );
+}
+function StatCard({ label, value }) {
+  return (
+    <Card style={{ padding: 18 }}>
+      <div style={{ fontFamily: mono, fontSize: 22, fontWeight: 600, color: colors.ink }}>{value}</div>
+      <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginTop: 4 }}>{label}</div>
+    </Card>
+  );
+}
+ 
+/* ---------------------- Pantalla: sin Firebase configurado ---------------------- */
+function SetupNeeded() {
+  return (
+    <div style={{ maxWidth: 620, margin: "60px auto", padding: 24, fontFamily: font }}>
+      <h1 style={{ fontFamily: display, color: colors.ink }}>Falta conectar Firebase</h1>
+      <p style={{ color: colors.inkSoft, lineHeight: 1.6 }}>
+        Este archivo funciona solo, pero necesita las claves de tu propio proyecto de Firebase
+        para poder guardar usuarios y sesiones de verdad. Abre este mismo archivo HTML con un
+        editor de texto, busca el bloque <code>firebaseConfig</code> cerca del inicio del
+        <code>&lt;script&gt;</code>, y reemplaza los valores <code>"TU_..."</code> por los que te
+        da la consola de Firebase (Configuración del proyecto → tus apps → SDK setup and
+        configuration).
+      </p>
+    </div>
+  );
+}
+ 
+/* ---------------------- Autenticación ---------------------- */
+function AuthScreen() {
+  const [mode, setMode] = useState("login");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+ 
+  const submit = async (e) => {
+    e.preventDefault();
+    setError(""); setLoading(true);
+    try {
+      if (mode === "register") {
+        const cred = await auth.createUserWithEmailAndPassword(email, password);
+        await db.collection("users").doc(cred.user.uid).set({
+          name: name || email.split("@")[0],
+          email,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        });
+      } else {
+        await auth.signInWithEmailAndPassword(email, password);
+      }
+    } catch (err) {
+      setError(traducirErrorFirebase(err.code) || err.message);
+    }
+    setLoading(false);
+  };
+ 
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: colors.canvas, fontFamily: font }}>
+      <Card style={{ width: 360 }}>
+        <h1 style={{ fontFamily: display, fontSize: 24, color: colors.ink, marginTop: 0 }}>
+          {mode === "login" ? "Entrar a Speaksy" : "Crear cuenta"}
+        </h1>
+        <form onSubmit={submit}>
+          {mode === "register" && (
+            <input placeholder="Nombre" value={name} onChange={(e) => setName(e.target.value)}
+              style={inputStyle} />
+          )}
+          <input type="email" placeholder="Correo" value={email} required
+            onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
+          <input type="password" placeholder="Contraseña (mín. 6 caracteres)" value={password} required
+            onChange={(e) => setPassword(e.target.value)} style={inputStyle} />
+          {error && <Note tone="danger">{error}</Note>}
+          <PrimaryButton disabled={loading} style={{ width: "100%", justifyContent: "center", marginTop: 12 }}>
+            {loading ? "Un momento…" : mode === "login" ? "Entrar" : "Registrarme"}
+          </PrimaryButton>
+        </form>
+        <button onClick={() => setMode(mode === "login" ? "register" : "login")} style={{
+          background: "none", border: "none", color: colors.teal, fontFamily: font, fontSize: 13.5,
+          marginTop: 14, cursor: "pointer",
+        }}>
+          {mode === "login" ? "¿No tienes cuenta? Regístrate" : "¿Ya tienes cuenta? Entra"}
+        </button>
+      </Card>
+    </div>
+  );
+}
+const inputStyle = {
+  width: "100%", padding: "11px 14px", borderRadius: 10, border: `1.5px solid ${colors.border}`,
+  fontFamily: font, fontSize: 14, marginBottom: 10, outline: "none",
+};
+function traducirErrorFirebase(code) {
+  const m = {
+    "auth/email-already-in-use": "Ese correo ya está registrado.",
+    "auth/invalid-email": "Correo inválido.",
+    "auth/weak-password": "La contraseña necesita al menos 6 caracteres.",
+    "auth/user-not-found": "No existe una cuenta con ese correo.",
+    "auth/wrong-password": "Contraseña incorrecta.",
+    "auth/invalid-credential": "Correo o contraseña incorrectos.",
+  };
+  return m[code];
+}
+ 
+/* ---------------------- Firestore: helpers de datos reales ---------------------- */
+function todayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+ 
+/* ---------------------- Niveles por constancia (XP), no por "fluidez" ----------------------
+   A propósito NO rankeamos por qué tan fluida es la voz de alguien — eso
+   sería comparar discapacidades del habla entre sí. Rankeamos por
+   constancia de práctica (XP ganado), que es sano de gamificar. */
+const LEVEL_TITLES = [
+  { min: 0, title: "Empezando" },
+  { min: 100, title: "Constante" },
+  { min: 300, title: "Enfocado" },
+  { min: 700, title: "Dedicado" },
+  { min: 1500, title: "Referente de práctica" },
+];
+function levelFor(xp) {
+  let current = LEVEL_TITLES[0];
+  let idx = 0;
+  for (let i = 0; i < LEVEL_TITLES.length; i++) {
+    if (xp >= LEVEL_TITLES[i].min) { current = LEVEL_TITLES[i]; idx = i; }
+  }
+  const next = LEVEL_TITLES[idx + 1] || null;
+  return { number: idx + 1, title: current.title, next };
+}
+function xpForSession(durationSeconds) {
+  return 20 + Math.round(durationSeconds / 10); // fijo por completar + un poco por duración
+}
+ 
+async function saveSession(uid, { category, durationSeconds, extra }) {
+  const sessionsRef = db.collection("users").doc(uid).collection("sessions");
+  await sessionsRef.add({
+    category, duration: durationSeconds, completed: true, ...extra,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+  });
+  const dayRef = db.collection("users").doc(uid).collection("daily").doc(todayKey());
+  await dayRef.set({
+    minutes: firebase.firestore.FieldValue.increment(Math.round(durationSeconds / 60)),
+    sessions: firebase.firestore.FieldValue.increment(1),
+  }, { merge: true });
+ 
+  const xpGained = xpForSession(durationSeconds);
+  const userRef = db.collection("users").doc(uid);
+  await userRef.set({ xp: firebase.firestore.FieldValue.increment(xpGained) }, { merge: true });
+ 
+  // Si el usuario optó por aparecer en el ranking, mantenemos su copia pública al día.
+  const profileSnap = await userRef.get();
+  const profile = profileSnap.data() || {};
+  if (profile.showOnLeaderboard) {
+    await db.collection("leaderboard").doc(uid).set({
+      displayName: profile.name || "Alguien practicando",
+      xp: profile.xp || 0,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+  }
+ 
+  await checkAchievements(uid);
+}
+ 
+const ACHIEVEMENTS = [
+  { id: "first_session", image: "fotos/primerasecion.png", name: "Primera sesión", check: (s) => s.totalSessions >= 1 },
+  { id: "streak_3", image: "fotos/3diaslogrados.png", name: "3 días practicando", check: (s) => s.streak >= 3 },
+  { id: "streak_7", image: "fotos/practicantenivel7.png", name: "7 días practicando", check: (s) => s.streak >= 7 },
+  { id: "sessions_10", image: "fotos/primeras10seciones.png", name: "10 sesiones", check: (s) => s.totalSessions >= 10 },
+  { id: "sessions_30", image: "fotos/primeras30seciones.png", name: "30 sesiones", check: (s) => s.totalSessions >= 30 },
+  { id: "first_conversation", image: "fotos/primeraconversacion.png", name: "Primera conversación", check: (s) => s.sessions.some((x) => x.category === "conversation") },
+];
+ 
+async function checkAchievements(uid) {
+  const stats = await loadStats(uid);
+  const unlockedRef = db.collection("users").doc(uid).collection("achievements");
+  const unlockedSnap = await unlockedRef.get();
+  const unlockedIds = new Set(unlockedSnap.docs.map((d) => d.id));
+  for (const a of ACHIEVEMENTS) {
+    if (!unlockedIds.has(a.id) && a.check(stats)) {
+      await unlockedRef.doc(a.id).set({ unlockedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    }
+  }
+}
+ 
+async function loadStats(uid) {
+  const sessionsSnap = await db.collection("users").doc(uid).collection("sessions")
+    .orderBy("createdAt", "desc").limit(200).get();
+  const sessions = sessionsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const totalSessions = sessions.length;
+  const totalMinutes = Math.round(sessions.reduce((sum, s) => sum + (s.duration || 0), 0) / 60);
+ 
+  const dailySnap = await db.collection("users").doc(uid).collection("daily").get();
+  const dailyDates = new Set(dailySnap.docs.map((d) => d.id));
+  let streak = 0;
+  let cursor = new Date();
+  while (true) {
+    const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
+    if (dailyDates.has(key)) { streak++; cursor.setDate(cursor.getDate() - 1); } else break;
+  }
+ 
+  const achSnap = await db.collection("users").doc(uid).collection("achievements").get();
+  const unlockedIds = new Set(achSnap.docs.map((d) => d.id));
+ 
+  return { sessions, totalSessions, totalMinutes, streak, unlockedIds };
+}
+ 
+/* ---------------------- Ejercicio: respiración ---------------------- */
+function BreathingRing({ size = 220, onFinish }) {
+  const phases = [
+    { key: "inhale", label: "INHALA", seconds: 4 },
+    { key: "hold", label: "MANTÉN", seconds: 2 },
+    { key: "exhale", label: "EXHALA", seconds: 6 },
+  ];
+  const [phaseIdx, setPhaseIdx] = useState(0);
+  const [count, setCount] = useState(phases[0].seconds);
+  const [running, setRunning] = useState(false);
+  const elapsedRef = useRef(0);
+ 
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => {
+      elapsedRef.current += 1;
+      setCount((c) => {
+        if (c <= 1) { setPhaseIdx((p) => (p + 1) % phases.length); return phases[(phaseIdx + 1) % phases.length].seconds; }
+        return c - 1;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line
+  }, [running, phaseIdx]);
+ 
+  const phase = phases[phaseIdx];
+  const scale = running ? (phase.key === "exhale" ? 0.62 : 1) : 0.8;
+ 
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 18 }}>
+      <div style={{ width: size, height: size, borderRadius: "50%", position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: `radial-gradient(circle, ${colors.mint} 0%, ${colors.mintSoft} 70%)`, transform: `scale(${scale})`, transition: `transform ${phase.seconds}s ease-in-out` }} />
+        <div style={{ position: "relative", textAlign: "center", fontFamily: font }}>
+          <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: 2, color: colors.teal }}>{running ? phase.label : "LISTO"}</div>
+          <div style={{ fontFamily: mono, fontSize: 40, fontWeight: 600, color: colors.ink, marginTop: 4 }}>{running ? count : "—"}</div>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 10 }}>
+        {!running ? (
+          <PrimaryButton onClick={() => { setRunning(true); setPhaseIdx(0); setCount(phases[0].seconds); elapsedRef.current = 0; }}>Iniciar</PrimaryButton>
+        ) : (
+          <GhostButton onClick={() => setRunning(false)}>Pausar</GhostButton>
+        )}
+        <GhostButton onClick={() => { setRunning(false); onFinish(elapsedRef.current); }}>Terminar y guardar</GhostButton>
+      </div>
+    </div>
+  );
+}
+ 
+function BreathingPage({ uid, onSaved, goBack }) {
+  const [saved, setSaved] = useState(false);
+  const finish = async (elapsedSeconds) => {
+    if (elapsedSeconds > 0) {
+      await saveSession(uid, { category: "breathing", durationSeconds: elapsedSeconds });
+      setSaved(true);
+      onSaved();
+    }
+  };
+  return (
+    <div style={{ maxWidth: 560, margin: "0 auto", padding: "40px 24px 100px", textAlign: "center" }}>
+      <button onClick={goBack} style={backLinkStyle}>← Volver</button>
+      <h1 style={{ fontFamily: display, fontSize: 26, color: colors.ink }}>Ejercicio de respiración</h1>
+      <p style={{ fontFamily: font, color: colors.inkSoft, marginBottom: 30 }}>Inhala 4s · mantén 2s · exhala 6s.</p>
+      <Card style={{ display: "flex", justifyContent: "center", padding: 36 }}>
+        <BreathingRing size={220} onFinish={finish} />
+      </Card>
+      {saved && <div style={{ marginTop: 16 }}><Note>Sesión guardada en tu cuenta.</Note></div>}
+    </div>
+  );
+}
+const backLinkStyle = { background: "none", border: "none", color: colors.inkSoft, fontFamily: font, fontSize: 13.5, cursor: "pointer", marginBottom: 18, display: "block" };
+ 
+/* ---------------------- Ejercicio: lectura (niveles + temas) ---------------------- */
+const READING_TEXTS = [
+  { id: "r1", level: "facil", topic: "deportes", title: "El partido", text: "El sábado fuimos al parque a jugar fútbol. Hacía sol y todos corrían felices detrás del balón." },
+  { id: "r2", level: "facil", topic: "videojuegos", title: "Mi juego favorito", text: "Me gusta jugar en la consola por las tardes. Mi personaje favorito salta muy alto y usa un escudo azul." },
+  { id: "r3", level: "facil", topic: "ciencia", title: "Las estrellas", text: "De noche el cielo se llena de estrellas. Algunas son tan grandes que parecen soles pequeños desde aquí." },
+  { id: "r4", level: "facil", topic: "peliculas", title: "Noche de cine", text: "Ayer vimos una película de aventuras. El personaje principal viajaba por el mar buscando un tesoro." },
+  { id: "r5", level: "intermedio", topic: "deportes", title: "El entrenamiento", text: "Los atletas entrenan todos los días para mejorar su resistencia. La constancia es más importante que un solo esfuerzo grande." },
+  { id: "r6", level: "intermedio", topic: "videojuegos", title: "Estrategia en equipo", text: "En los juegos de equipo, comunicarse bien con tus compañeros puede ser más útil que tener la mejor puntería." },
+  { id: "r7", level: "intermedio", topic: "ciencia", title: "El agua", text: "El agua puede existir en tres estados distintos: sólido, líquido y gaseoso, dependiendo de la temperatura que la rodea." },
+  { id: "r8", level: "intermedio", topic: "peliculas", title: "Detrás de cámaras", text: "Muchas películas tardan más de un año en filmarse, entre escribir el guion, grabar las escenas y editar el resultado final." },
+  { id: "r9", level: "avanzado", topic: "deportes", title: "Historia olímpica", text: "Los Juegos Olímpicos modernos comenzaron en 1896 en Atenas, inspirados en las competencias que se realizaban en la antigua Grecia." },
+  { id: "r10", level: "avanzado", topic: "videojuegos", title: "Diseño de niveles", text: "Diseñar un buen nivel de videojuego requiere equilibrar la dificultad con la sensación de progreso, para que el jugador se sienta desafiado sin frustrarse." },
+  { id: "r11", level: "avanzado", topic: "ciencia", title: "El sistema solar", text: "Nuestro sistema solar contiene ocho planetas que orbitan alrededor del sol, cada uno con características atmosféricas completamente distintas." },
+  { id: "r12", level: "avanzado", topic: "peliculas", title: "El montaje", text: "El proceso de edición permite transformar horas de grabación en una historia coherente, decidiendo qué escenas conservar y en qué orden contarlas." },
+];
+const LEVELS = [["facil", "🟢 Fácil"], ["intermedio", "🟡 Intermedio"], ["avanzado", "🔴 Avanzado"]];
+const TOPICS = [["deportes", "Deportes"], ["videojuegos", "Videojuegos"], ["ciencia", "Ciencia"], ["peliculas", "Películas"]];
+ 
+// Autoreporte, no diagnóstico: el usuario cuenta lo que le pasa, en sus
+// propias palabras. Speaksy nunca determina esto por sí solo.
+const FOCUS_AREAS = [
+  { id: "tartamudez", label: "Tartamudez", desc: "interrupciones, repeticiones o bloqueos al hablar", recommend: ["breathing", "reading"] },
+  { id: "articulacion", label: "Sonidos específicos", desc: "dificultad para pronunciar ciertos sonidos, como /r/, /s/ o /l/", recommend: ["articulation"] },
+  { id: "apraxia", label: "Coordinar los movimientos del habla", desc: "cuesta planificar y encadenar los sonidos de una palabra", recommend: ["articulation"] },
+  { id: "disartria", label: "Claridad al hablar", desc: "el habla puede sonar poco clara por el control muscular", recommend: ["reading", "articulation"] },
+  { id: "taquilalia", label: "Hablar muy rápido", desc: "el mensaje cuesta entenderse por la velocidad", recommend: ["reading"] },
+  { id: "disfonia", label: "Cambios en la voz", desc: "ronquera, cambios de tono o dificultad para producir la voz", recommend: ["breathing"] },
+  { id: "resonancia", label: "Sonido nasal o de resonancia", desc: "la voz suena distinta de lo esperado en resonancia", recommend: ["articulation"] },
+  { id: "otro", label: "Otra cosa / prefiero explorar libremente", desc: "", recommend: [] },
+];
+ 
+const SOUND_BANK = {
+  r: { label: "R suave — como en 'pero'", syllables: "ra re ri ro ru", words: "pero cara toro aro", phrase: "El oso quiere comer cereal para el desayuno." },
+  rr: { label: "RR fuerte — como en 'perro'", syllables: "rra rre rri rro rru", words: "perro carro tierra guerra", phrase: "El carro rojo corre rápido por la carretera." },
+  s: { label: "S — como en 'sol'", syllables: "sa se si so su", words: "sol casa mesa oso", phrase: "El sol sale sobre la montaña en silencio." },
+  l: { label: "L — como en 'luna'", syllables: "la le li lo lu", words: "luna sol pelota flor", phrase: "La luna ilumina el lago en la noche." },
+  t: { label: "T — como en 'taza'", syllables: "ta te ti to tu", words: "taza pato tren gato", phrase: "El gato toma té en la taza pequeña." },
+};
+ 
+/* =========================================================
+   NIVELES ESTILO DUOLINGO — 4 áreas, cada una con su propia
+   progresión desbloqueable. Todo lo de aquí para abajo hasta
+   "FIN DE NIVELES" es contenido + lógica nueva; no reemplaza
+   nada de lo que ya existía arriba (respiración libre, lectura
+   libre, conversación libre, articulación libre siguen intactas).
+========================================================= */
+ 
+function starsFor(fraction) {
+  if (fraction >= 0.9) return 3;
+  if (fraction >= 0.5) return 2;
+  if (fraction > 0) return 1;
+  return 0;
+}
+function xpForStars(stars) {
+  return 10 + stars * 15;
+}
+ 
+const BREATHING_LEVELS = [
+  { id: 1, title: "Respiración básica", desc: "Un ciclo completo (inhala-mantén-exhala), a tu ritmo.", cycles: 1 },
+  { id: 2, title: "Respiración controlada", desc: "Tres ciclos seguidos, manteniendo el mismo ritmo.", cycles: 3 },
+  { id: 3, title: "Respiración + tiempo", desc: "Cinco ciclos, sosteniendo la calma un poco más.", cycles: 5 },
+  { id: 4, title: "Respiración mientras hablas", desc: "En cada exhalación, di una palabra en voz alta.", cycles: 3, words: ["calma", "listo", "bien"] },
+  { id: 5, title: "Respiración + frases cortas", desc: "En cada exhalación, di una frase corta.", cycles: 3, words: ["Estoy tranquilo", "Voy a lograrlo", "Respiro y sigo"] },
+  { id: 6, title: "Desafío de respiración y habla", desc: "Cinco ciclos completos, diciendo una frase distinta en cada uno.", cycles: 5, words: ["Estoy tranquilo", "Voy a lograrlo", "Respiro y sigo", "Puedo hacerlo", "Un paso a la vez"] },
+];
+ 
+const READING_LEVELS = [
+  { id: 1, title: "Palabras individuales", desc: "Lee estas palabras, una por una, sin apuro.", parts: ["casa perro sol luna flor"] },
+  { id: 2, title: "Frases cortas", desc: "Lee estas frases cortas en voz alta.", parts: ["El sol brilla.", "El perro corre.", "Hace calor hoy."] },
+  { id: 3, title: "Frases más largas", desc: "Un poco más de texto por frase.", parts: ["Esta mañana caminé por el parque cerca de mi casa.", "El agua del río bajaba tranquila entre las piedras."] },
+  { id: 4, title: "Párrafos cortos", desc: "Un párrafo completo, a tu ritmo.", parts: ["El fin de semana fuimos a la playa con toda la familia. El agua estaba fría, pero el sol calentaba bastante."] },
+  { id: 5, title: "Lectura con pausas", desc: "Haz una pausa clara donde veas '/'.", parts: ["Respiré hondo, / miré el horizonte / y empecé a caminar sin prisa."] },
+  { id: 6, title: "Lectura de textos más largos", desc: "Un texto más largo, dividido en dos partes.", parts: [
+    "La biblioteca del pueblo abría todos los días a las nueve de la mañana. Muchos estudiantes llegaban temprano a buscar un lugar tranquilo para estudiar.",
+    "Al final de la tarde, cuando el sol empezaba a bajar, la bibliotecaria encendía las luces amarillas y ponía música suave de fondo.",
+  ] },
+];
+ 
+const CONVERSATION_LEVELS = [
+  { id: 1, title: "Saludos", desc: "Preguntas simples de saludo.", questions: ["Hola, ¿cómo estás?", "¿Qué tal tu día?"] },
+  { id: 2, title: "Presentarse", desc: "Cuenta un poco sobre ti.", questions: ["¿Cómo te llamas?", "¿A qué te dedicas?"] },
+  { id: 3, title: "Responder preguntas simples", desc: "Preguntas cortas y directas.", questions: ["¿Cuál es tu color favorito?", "¿Qué te gusta comer?"] },
+  { id: 4, title: "Situaciones cotidianas", desc: "Cosas del día a día.", questions: ["¿Qué hiciste hoy?", "¿Cómo fue tu semana?", "¿Qué planes tienes para mañana?"] },
+  { id: 5, title: "Conversaciones más largas", desc: "Una cadena de varias preguntas.", questions: ["Cuéntame sobre un lugar que te guste.", "¿Qué es lo que más disfrutas hacer en tu tiempo libre?", "¿Hay algo nuevo que te gustaría aprender?"] },
+  { id: 6, title: "Conversación libre", desc: "Preguntas abiertas, responde como quieras.", questions: ["Si pudieras cambiar algo de tu rutina, ¿qué sería?", "Cuéntame una historia corta de algo que te pasó.", "¿Qué consejo le darías a alguien que empieza algo nuevo?"] },
+  { id: 7, title: "Desafío de conversación", desc: "Una conversación más larga y variada.", questions: ["Cuéntame sobre tu semana con detalle.", "¿Qué opinas sobre trabajar en equipo?", "Describe un día perfecto para ti.", "¿Qué te gustaría estar haciendo en 5 años?"] },
+];
+ 
+const ARTICULATION_LEVELS = [
+  { id: 1, title: "Vocales y sonidos básicos", desc: "Sonidos base, despacio y claro.", parts: ["a e i o u"] },
+  { id: 2, title: "Sílabas", desc: "Sílabas simples.", parts: ["ma me mi mo mu"] },
+  { id: 3, title: "Palabras con sonidos específicos", desc: "Palabras con el sonido /r/.", parts: ["pero cara toro aro"] },
+  { id: 4, title: "Frases cortas", desc: "Una frase completa, con calma.", parts: ["El oso quiere comer cereal para el desayuno."] },
+  { id: 5, title: "Trabalenguas fáciles", desc: "Prioriza la claridad, no la velocidad.", parts: ["Pablito clavó un clavito en la calva de un calvito."] },
+  { id: 6, title: "Trabalenguas de dificultad media", desc: "Ve palabra por palabra si lo necesitas.", parts: ["Tres tristes tigres tragaban trigo en un trigal."] },
+  { id: 7, title: "Trabalenguas difíciles", desc: "Tómate tu tiempo con este.", parts: ["El cielo está enladrillado. ¿Quién lo desenladrillará? El desenladrillador que lo desenladrille, buen desenladrillador será."] },
+  { id: 8, title: "Trabalenguas con sonidos específicos", desc: "Enfocado en el sonido /rr/.", parts: ["Erre con erre, cigarro. Erre con erre, barril."] },
+  { id: 9, title: "Trabalenguas con ritmo y pausas", desc: "Haz una pausa clara en cada '/'.", parts: ["Como poco coco como, / poco coco compro."] },
+  { id: 10, title: "Desafío final de trabalenguas", desc: "Varios trabalenguas seguidos, con calma.", parts: [
+    "Pablito clavó un clavito en la calva de un calvito.",
+    "Tres tristes tigres tragaban trigo en un trigal.",
+    "Erre con erre, cigarro. Erre con erre, barril.",
+  ] },
+];
+ 
+const LEVEL_AREAS = {
+  breathing: { label: "🌬️ Respiración", levels: BREATHING_LEVELS },
+  reading: { label: "📖 Lectura", levels: READING_LEVELS },
+  conversation: { label: "💬 Conversación", levels: CONVERSATION_LEVELS },
+  articulation: { label: "🔊 Sonido y articulación", levels: ARTICULATION_LEVELS },
+};
+ 
+async function loadLevelProgress(uid, area) {
+  const doc = await db.collection("users").doc(uid).collection("levelProgress").doc(area).get();
+  return (doc.exists && doc.data().completed) || {};
+}
+ 
+async function saveLevelResult(uid, area, levelId, stars, durationSeconds) {
+  const xp = xpForStars(stars);
+  await db.collection("users").doc(uid).collection("levelProgress").doc(area).set({
+    completed: { [levelId]: { stars, xp, at: firebase.firestore.FieldValue.serverTimestamp() } },
+  }, { merge: true });
+  await saveSession(uid, {
+    category: area, durationSeconds: durationSeconds || 30,
+    extra: { level: levelId, stars, viaLevelPath: true },
+  });
+}
+ 
+// Reconocimiento de voz del navegador (Chrome/Edge lo soportan bien; Safari y
+// Firefox tienen soporte limitado o nulo). No hay backend ni API propia detrás:
+// es el motor de voz que trae el propio navegador.
+const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+ 
+function normalizeWord(w) {
+  return (w || "")
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}]/gu, "");
+}
+ 
+/* ---------------------- Análisis de pronunciación real (beta) ----------------------
+   Graba audio de verdad con el micrófono, lo convierte a WAV 16kHz mono, y lo
+   manda a tu Cloud Function (functions/index.js), que a su vez llama a Azure
+   Pronunciation Assessment. Sin FUNCTIONS_URL configurado, el botón avisa que
+   falta desplegar el backend en vez de fallar en silencio. */
+function encodeWAV(samples, sampleRate) {
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+  const writeString = (offset, str) => { for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)); };
+  writeString(0, "RIFF"); view.setUint32(4, 36 + samples.length * 2, true); writeString(8, "WAVE");
+  writeString(12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  writeString(36, "data"); view.setUint32(40, samples.length * 2, true);
+  let offset = 44;
+  for (let i = 0; i < samples.length; i++, offset += 2) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return new Blob([view], { type: "audio/wav" });
+}
+ 
+function PronunciationAnalysis({ referenceText, allowAnalysis }) {
+  const [status, setStatus] = useState("idle"); // idle | recording | analyzing | done | error
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const streamRef = useRef(null);
+  const audioCtxRef = useRef(null);
+  const processorRef = useRef(null);
+  const samplesRef = useRef([]);
+ 
+  const start = async () => {
+    setStatus("recording"); setResult(null); setError("");
+    samplesRef.current = [];
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      audioCtxRef.current = audioCtx;
+      const source = audioCtx.createMediaStreamSource(stream);
+      const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+      processorRef.current = processor;
+      processor.onaudioprocess = (e) => samplesRef.current.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+      source.connect(processor);
+      processor.connect(audioCtx.destination);
+    } catch (e) {
+      setError("No se pudo acceder al micrófono: " + e.message);
+      setStatus("error");
+    }
+  };
+ 
+  const stop = async () => {
+    setStatus("analyzing");
+    try {
+      processorRef.current && processorRef.current.disconnect();
+      streamRef.current && streamRef.current.getTracks().forEach((t) => t.stop());
+      const sampleRate = audioCtxRef.current.sampleRate;
+      const total = samplesRef.current.reduce((s, a) => s + a.length, 0);
+      const merged = new Float32Array(total);
+      let off = 0;
+      for (const chunk of samplesRef.current) { merged.set(chunk, off); off += chunk.length; }
+      const targetRate = 16000;
+      const ratio = sampleRate / targetRate;
+      const resampled = new Float32Array(Math.floor(merged.length / ratio));
+      for (let i = 0; i < resampled.length; i++) resampled[i] = merged[Math.floor(i * ratio)] || 0;
+ 
+      const wavBlob = encodeWAV(resampled, targetRate);
+      const bytes = new Uint8Array(await wavBlob.arrayBuffer());
+      let binary = "";
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      const audioBase64 = btoa(binary);
+ 
+      const idToken = await auth.currentUser.getIdToken();
+      const res = await fetch(FUNCTIONS_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ audioBase64, referenceText }),
+      });
+      const data = await res.json();
+      if (data.error) { setError(data.error); setStatus("error"); return; }
+      setResult(data);
+      setStatus("done");
+    } catch (e) {
+      setError("No se pudo analizar el audio: " + e.message);
+      setStatus("error");
+    }
+  };
+ 
+  if (!allowAnalysis) {
+    return (
+      <Card style={{ marginTop: 16 }}>
+        <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 6 }}>
+          Análisis de pronunciación (beta)
+        </div>
+        <Note>
+          Esto está apagado. Actívalo desde Perfil → Privacidad y permisos si
+          quieres que tu audio se envíe a Azure para un puntaje de exactitud,
+          fluidez y completitud.
+        </Note>
+      </Card>
+    );
+  }
+ 
+  if (!FUNCTIONS_URL) {
+    return (
+      <Card style={{ marginTop: 16 }}>
+        <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 6 }}>
+          Análisis de pronunciación (beta)
+        </div>
+        <Note>
+          Todavía no está conectado el backend de análisis (Azure). Revisa
+          STATUS.md y functions/index.js para desplegarlo; mientras tanto este
+          botón queda desactivado.
+        </Note>
+      </Card>
+    );
+  }
+ 
+  return (
+    <Card style={{ marginTop: 16 }}>
+      <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 8 }}>
+        Análisis de pronunciación (beta)
+      </div>
+      <p style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginBottom: 12 }}>
+        Graba de nuevo esta misma frase para obtener un puntaje de exactitud,
+        fluidez y completitud, calculado por un servicio externo (Azure).
+      </p>
+      {status === "idle" && <PrimaryButton onClick={start}>🎙️ Grabar y analizar</PrimaryButton>}
+      {status === "recording" && <GhostButton onClick={stop}>⏹ Detener y analizar</GhostButton>}
+      {status === "analyzing" && <Note>Analizando tu pronunciación…</Note>}
+      {status === "error" && <Note tone="danger">{error}</Note>}
+      {status === "done" && result && (
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 12 }}>
+            <StatCard label="Exactitud" value={Math.round(result.accuracy || 0)} />
+            <StatCard label="Fluidez" value={Math.round(result.fluency || 0)} />
+            <StatCard label="Completitud" value={Math.round(result.completeness || 0)} />
+          </div>
+          <div style={{ fontFamily: font, fontSize: 15, lineHeight: 1.9 }}>
+            {result.words.map((w, i) => (
+              <span key={i} style={{
+                color: w.errorType === "None" ? colors.ink : colors.danger,
+                fontWeight: w.errorType === "None" ? 400 : 700, marginRight: 5,
+              }}>{w.word}</span>
+            ))}
+          </div>
+          <p style={{ fontFamily: font, fontSize: 12, color: colors.inkSoft, marginTop: 10 }}>
+            En rojo, las palabras que Azure marcó con algún tipo de error de
+            pronunciación u omisión.
+          </p>
+        </div>
+      )}
+    </Card>
+  );
+}
+ 
+function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
+  const [level, setLevel] = useState("facil");
+  const [topic, setTopic] = useState("deportes");
+  const [selected, setSelected] = useState(null);
+  const [status, setStatus] = useState("idle");
+  const [seconds, setSeconds] = useState(0);
+  const [matchedCount, setMatchedCount] = useState(0);
+  const [micError, setMicError] = useState("");
+  const recognitionRef = useRef(null);
+  const recordingRef = useRef(false); // evita cerrar sobre un `status` viejo dentro de los callbacks
+  const startTimeRef = useRef(0);
+  const timestampsRef = useRef([]); // ms desde el inicio en que se reconoció cada palabra nueva
+ 
+  const options = READING_TEXTS.filter((t) => t.level === level && t.topic === topic);
+  const words = selected ? selected.text.split(/\s+/) : [];
+  const targetNormalized = words.map(normalizeWord);
+ 
+  useEffect(() => {
+    if (status !== "recording") return;
+    const t = setInterval(() => setSeconds((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [status]);
+ 
+  const errorMessages = {
+    "not-allowed": "Bloqueaste el permiso del micrófono. Haz clic en el ícono de candado/micrófono en la barra de direcciones y permítelo, luego intenta de nuevo.",
+    "no-speech": "No se detectó voz. Acércate al micrófono e intenta de nuevo.",
+    "audio-capture": "No se encontró un micrófono disponible en este dispositivo.",
+    "network": "Hubo un problema de red con el reconocimiento de voz. Revisa tu conexión.",
+    "service-not-allowed": "El navegador bloqueó el reconocimiento de voz en esta página.",
+  };
+ 
+  const startRecording = () => {
+    setStatus("recording"); setSeconds(0); setMatchedCount(0); setMicError("");
+    recordingRef.current = true;
+    startTimeRef.current = Date.now();
+    timestampsRef.current = [];
+ 
+    if (!SpeechRecognitionAPI) return; // sin voz en vivo, solo el temporizador
+ 
+    const recognition = new SpeechRecognitionAPI();
+    recognition.lang = "es-ES";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+ 
+    recognition.onresult = (e) => {
+      let transcript = "";
+      for (let i = 0; i < e.results.length; i++) transcript += e.results[i][0].transcript + " ";
+      const said = transcript.trim().split(/\s+/).map(normalizeWord);
+      let count = 0;
+      for (let i = 0; i < Math.min(said.length, targetNormalized.length); i++) {
+        if (said[i] && said[i] === targetNormalized[i]) count = i + 1; else break;
+      }
+      setMatchedCount((prev) => {
+        if (count > prev) timestampsRef.current.push(Date.now() - startTimeRef.current);
+        return Math.max(prev, count);
+      });
+    };
+    recognition.onerror = (e) => {
+      // Antes esto no hacía nada y el error quedaba invisible para el usuario.
+      if (errorMessages[e.error]) setMicError(errorMessages[e.error]);
+      if (e.error === "not-allowed" || e.error === "service-not-allowed" || e.error === "audio-capture") {
+        recordingRef.current = false;
+        setStatus("idle");
+      }
+    };
+    recognition.onend = () => {
+      // Algunos navegadores cortan el reconocimiento solo tras unos segundos;
+      // si el usuario sigue "grabando", lo reiniciamos automáticamente.
+      if (recordingRef.current) {
+        try { recognition.start(); } catch (e) {}
+      }
+    };
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch (e) {
+      setMicError("No se pudo iniciar el micrófono: " + e.message);
+      recordingRef.current = false;
+      setStatus("idle");
+    }
+  };
+ 
+  // Métricas de fluidez calculadas de verdad a partir de los tiempos entre
+  // palabras reconocidas — no es pronunciación, pero sí es una señal real.
+  const computeFluency = () => {
+    const ts = timestampsRef.current;
+    let pauseCount = 0;
+    for (let i = 1; i < ts.length; i++) {
+      if (ts[i] - ts[i - 1] > 1200) pauseCount++; // hueco > 1.2s entre palabras
+    }
+    const minutes = seconds / 60;
+    const wordsPerMinute = minutes > 0 && matchedCount > 0 ? Math.round(matchedCount / minutes) : 0;
+    return { pauseCount, wordsPerMinute };
+  };
+ 
+  const finish = async () => {
+    recordingRef.current = false;
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch (e) {}
+    }
+    const fluency = computeFluency();
+    setStatus("done");
+    await saveSession(uid, {
+      category: "reading", durationSeconds: seconds,
+      extra: {
+        level, topic, title: selected.title, wordsMatched: matchedCount, totalWords: words.length,
+        pauseCount: fluency.pauseCount, wordsPerMinute: fluency.wordsPerMinute,
+      },
+    });
+    onSaved();
+  };
+ 
+  if (!selected) {
+    return (
+      <div style={{ maxWidth: 680, margin: "0 auto", padding: "40px 24px 100px" }}>
+        <button onClick={goBack} style={backLinkStyle}>← Volver</button>
+        <h1 style={{ fontFamily: display, fontSize: 26, color: colors.ink, marginBottom: 20 }}>Lectura en voz alta</h1>
+ 
+        <Card style={{ marginBottom: 16 }}>
+          <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 10 }}>Nivel</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {LEVELS.map(([id, label]) => (
+              <button key={id} onClick={() => setLevel(id)} style={{
+                padding: "9px 16px", borderRadius: 999, cursor: "pointer",
+                border: `1.5px solid ${level === id ? colors.teal : colors.border}`,
+                background: level === id ? colors.teal : "#fff", color: level === id ? "#fff" : colors.ink,
+                fontFamily: font, fontWeight: 600, fontSize: 13.5,
+              }}>{label}</button>
+            ))}
+          </div>
+        </Card>
+ 
+        <Card style={{ marginBottom: 16 }}>
+          <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 10 }}>Tema</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {TOPICS.map(([id, label]) => (
+              <button key={id} onClick={() => setTopic(id)} style={{
+                padding: "9px 16px", borderRadius: 999, cursor: "pointer",
+                border: `1.5px solid ${topic === id ? colors.teal : colors.border}`,
+                background: topic === id ? colors.mintSoft : "#fff", color: topic === id ? colors.teal : colors.ink,
+                fontFamily: font, fontWeight: 600, fontSize: 13.5,
+              }}>{label}</button>
+            ))}
+          </div>
+        </Card>
+ 
+        <Card>
+          <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 10 }}>Elige un texto</div>
+          {options.map((t) => (
+            <button key={t.id} onClick={() => { setSelected(t); setStatus("idle"); setSeconds(0); }} style={{
+              display: "block", width: "100%", textAlign: "left", padding: "12px 14px", marginBottom: 8,
+              borderRadius: 12, border: `1.5px solid ${colors.border}`, background: "#fff", cursor: "pointer",
+              fontFamily: font, fontSize: 14, color: colors.ink,
+            }}>{t.title}</button>
+          ))}
+        </Card>
+      </div>
+    );
+  }
+ 
+  return (
+    <div style={{ maxWidth: 620, margin: "0 auto", padding: "40px 24px 100px" }}>
+      <button onClick={() => setSelected(null)} style={backLinkStyle}>← Elegir otro texto</button>
+      <h1 style={{ fontFamily: display, fontSize: 24, color: colors.ink, marginBottom: 6 }}>{selected.title}</h1>
+      <p style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginBottom: 18 }}>
+        {LEVELS.find((l) => l[0] === level)[1]} · {TOPICS.find((t) => t[0] === topic)[1]}
+      </p>
+      <Card style={{ marginBottom: 20 }}>
+        <p style={{ fontFamily: display, fontSize: 22, lineHeight: 1.8, color: colors.ink }}>
+          {words.map((w, i) => (
+            <span key={i} style={{
+              background: i < matchedCount ? colors.mintSoft : "transparent",
+              color: i < matchedCount ? colors.teal : colors.ink,
+              borderRadius: 5, padding: "1px 3px", transition: "background .25s ease, color .25s ease",
+            }}>{w} </span>
+          ))}
+        </p>
+      </Card>
+ 
+      {micError && (
+        <div style={{ marginBottom: 16 }}>
+          <Note tone="danger">{micError}</Note>
+        </div>
+      )}
+      {status === "recording" && SpeechRecognitionAPI && !micError && (
+        <div style={{ marginBottom: 16 }}>
+          <Note>
+            El texto se va resaltando mientras hablas, como guía visual — se basa
+            en el reconocimiento de voz del navegador, así que puede saltarse
+            palabras o adelantarse un poco. No es una medición clínica.
+          </Note>
+        </div>
+      )}
+      {status === "idle" && !SpeechRecognitionAPI && (
+        <div style={{ marginBottom: 16 }}>
+          <Note>
+            Tu navegador no soporta el resaltado en vivo, pero igual puedes grabar
+            y guardar la duración de tu práctica. Funciona mejor en Chrome.
+          </Note>
+        </div>
+      )}
+ 
+      <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 20 }}>
+        {status !== "recording" && status !== "done" ? (
+          <PrimaryButton onClick={startRecording}>🎤 Comenzar grabación</PrimaryButton>
+        ) : status === "recording" ? (
+          <GhostButton onClick={finish}>⏹ Terminar</GhostButton>
+        ) : null}
+      </div>
+      {status === "recording" && (
+        <div style={{ textAlign: "center", fontFamily: mono, color: colors.teal }}>
+          Grabando… {seconds}s{SpeechRecognitionAPI ? ` · ${matchedCount}/${words.length} palabras` : ""}
+        </div>
+      )}
+      {status === "done" && (
+        <Card>
+          <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 12 }}>Resultado de la sesión</div>
+          {SpeechRecognitionAPI && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+              <StatCard label="Palabras seguidas" value={`${matchedCount}/${words.length}`} />
+              <StatCard label="Ritmo aproximado" value={`${computeFluency().wordsPerMinute} ppm`} />
+              <StatCard label="Pausas detectadas" value={computeFluency().pauseCount} />
+              <StatCard label="Duración" value={`${seconds}s`} />
+            </div>
+          )}
+          <Note>
+            Estas cifras (ritmo y pausas) se calculan de verdad a partir de los
+            tiempos entre palabras reconocidas — son una señal real de fluidez,
+            no de pronunciación. Un número alto de pausas no es "malo", solo
+            describe tu ritmo en esta sesión puntual; esto nunca representa un
+            diagnóstico.
+          </Note>
+        </Card>
+      )}
+      <PronunciationAnalysis referenceText={selected.text} allowAnalysis={allowAnalysis} />
+    </div>
+  );
+}
+ 
+/* ---------------------- Modo conversación ---------------------- */
+const CONVERSATION_TOPICS = {
+  cotidiano: {
+    label: "Charla cotidiana",
+    questions: [
+      "¿Cómo estuvo tu día hoy?",
+      "¿Qué hiciste este fin de semana?",
+      "¿Cuál es tu comida favorita?",
+      "¿Prefieres el frío o el calor? ¿Por qué?",
+    ],
+  },
+  entretenimiento: {
+    label: "Entretenimiento",
+    questions: [
+      "¿Cuál fue tu película favorita?",
+      "¿Qué videojuego te gusta jugar últimamente?",
+      "¿Qué canción tienes en la cabeza esta semana?",
+      "Si pudieras viajar a cualquier lugar, ¿a dónde irías?",
+    ],
+  },
+  amigos: {
+    label: "Hablar con amigos",
+    questions: [
+      "Cuéntame sobre alguien importante para ti.",
+      "¿Qué te gusta hacer cuando sales con amigos?",
+      "¿Cómo conociste a tu mejor amigo o amiga?",
+      "¿Qué plan te gustaría hacer este mes?",
+    ],
+  },
+};
+ 
+function ConversationPage({ uid, onSaved, goBack }) {
+  const [topicKey, setTopicKey] = useState(null);
+  const [qIndex, setQIndex] = useState(0);
+  const [answers, setAnswers] = useState([]);
+  const [listening, setListening] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [phase, setPhase] = useState("chat"); // chat | rating | done
+  const [ratings, setRatings] = useState({ comodidad: 0, confianza: 0, participacion: 0 });
+  const secondsRef = useRef(0);
+  const recognitionRef = useRef(null);
+ 
+  useEffect(() => {
+    if (!topicKey || phase !== "chat") return;
+    const t = setInterval(() => { secondsRef.current += 1; }, 1000);
+    return () => clearInterval(t);
+  }, [topicKey, phase]);
+ 
+  const topicData = topicKey ? CONVERSATION_TOPICS[topicKey] : null;
+  const question = topicData ? topicData.questions[qIndex] : null;
+ 
+  const startListening = () => {
+    if (!SpeechRecognitionAPI) return;
+    const recognition = new SpeechRecognitionAPI();
+    recognition.lang = "es-ES";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = (e) => setDraft(e.results[0][0].transcript);
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+    recognitionRef.current = recognition;
+    setListening(true);
+    recognition.start();
+  };
+ 
+  const nextQuestion = () => {
+    setAnswers((a) => [...a, { question, answer: draft }]);
+    setDraft("");
+    if (qIndex + 1 < topicData.questions.length) {
+      setQIndex(qIndex + 1);
+    } else {
+      setPhase("rating");
+    }
+  };
+ 
+  const submitRating = async () => {
+    await saveSession(uid, {
+      category: "conversation", durationSeconds: secondsRef.current,
+      extra: {
+        topic: topicKey, questionsAnswered: answers.length,
+        comfort: ratings.comodidad, confidence: ratings.confianza, participation: ratings.participacion,
+      },
+    });
+    setPhase("done");
+    onSaved();
+  };
+ 
+  if (!topicKey) {
+    return (
+      <div style={{ maxWidth: 620, margin: "0 auto", padding: "40px 24px 100px" }}>
+        <button onClick={goBack} style={backLinkStyle}>← Volver</button>
+        <h1 style={{ fontFamily: display, fontSize: 26, color: colors.ink, marginBottom: 10 }}>Modo conversación</h1>
+        <p style={{ fontFamily: font, color: colors.inkSoft, marginBottom: 20 }}>
+          Elige un tema y conversemos con calma, una pregunta a la vez.
+        </p>
+        {!SpeechRecognitionAPI && (
+          <div style={{ marginBottom: 16 }}>
+            <Note>
+              Tu navegador no soporta reconocimiento de voz automático, así que
+              podrás escribir tus respuestas en vez de decirlas. Esto funciona mejor
+              en Chrome.
+            </Note>
+          </div>
+        )}
+        {Object.entries(CONVERSATION_TOPICS).map(([key, t]) => (
+          <button key={key} onClick={() => { setTopicKey(key); setQIndex(0); setAnswers([]); secondsRef.current = 0; }} style={{
+            display: "block", width: "100%", textAlign: "left", padding: "16px", marginBottom: 10,
+            borderRadius: 14, border: `1.5px solid ${colors.border}`, background: "#fff", cursor: "pointer",
+            fontFamily: font, fontWeight: 600, fontSize: 15, color: colors.ink,
+          }}>{t.label}</button>
+        ))}
+      </div>
+    );
+  }
+ 
+  if (phase === "chat") {
+    return (
+      <div style={{ maxWidth: 560, margin: "0 auto", padding: "40px 24px 100px" }}>
+        <button onClick={goBack} style={backLinkStyle}>← Salir de la conversación</button>
+        <p style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginBottom: 8 }}>
+          {topicData.label} · Pregunta {qIndex + 1} de {topicData.questions.length}
+        </p>
+        <Card style={{ marginBottom: 18 }}>
+          <div style={{ fontFamily: font, fontSize: 12, fontWeight: 700, color: colors.teal, marginBottom: 8 }}>SPEAKSY PREGUNTA</div>
+          <p style={{ fontFamily: display, fontSize: 22, color: colors.ink, margin: 0 }}>{question}</p>
+        </Card>
+ 
+        {SpeechRecognitionAPI ? (
+          <div style={{ textAlign: "center", marginBottom: 16 }}>
+            {!listening ? (
+              <PrimaryButton onClick={startListening}>🎤 Responder por voz</PrimaryButton>
+            ) : (
+              <Note>Escuchando… habla con calma, no hay ninguna prisa.</Note>
+            )}
+          </div>
+        ) : (
+          <textarea value={draft} onChange={(e) => setDraft(e.target.value)}
+            placeholder="Escribe tu respuesta aquí…"
+            style={{ width: "100%", minHeight: 90, padding: 12, borderRadius: 12, border: `1.5px solid ${colors.border}`, fontFamily: font, fontSize: 14, marginBottom: 16 }} />
+        )}
+ 
+        {draft && (
+          <Card style={{ marginBottom: 16, background: colors.mintSoft, border: "none" }}>
+            <div style={{ fontFamily: font, fontSize: 12, fontWeight: 700, color: colors.teal, marginBottom: 6 }}>TU RESPUESTA</div>
+            <p style={{ fontFamily: font, color: colors.ink, margin: 0 }}>{draft}</p>
+          </Card>
+        )}
+ 
+        <PrimaryButton disabled={!draft} onClick={nextQuestion} style={{ width: "100%", justifyContent: "center" }}>
+          {qIndex + 1 < topicData.questions.length ? "Siguiente pregunta" : "Terminar conversación"}
+        </PrimaryButton>
+      </div>
+    );
+  }
+ 
+  if (phase === "rating") {
+    const scale = [1, 2, 3, 4, 5];
+    const Row = ({ label, field }) => (
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontFamily: font, fontWeight: 600, color: colors.ink, marginBottom: 8 }}>{label}</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {scale.map((n) => (
+            <button key={n} onClick={() => setRatings((r) => ({ ...r, [field]: n }))} style={{
+              width: 40, height: 40, borderRadius: "50%", cursor: "pointer",
+              border: `1.5px solid ${ratings[field] >= n ? colors.teal : colors.border}`,
+              background: ratings[field] >= n ? colors.teal : "#fff",
+              color: ratings[field] >= n ? "#fff" : colors.inkSoft, fontFamily: mono, fontWeight: 600,
+            }}>{n}</button>
+          ))}
+        </div>
+      </div>
+    );
+    const allRated = ratings.comodidad && ratings.confianza && ratings.participacion;
+    return (
+      <div style={{ maxWidth: 520, margin: "0 auto", padding: "40px 24px 100px" }}>
+        <h1 style={{ fontFamily: display, fontSize: 24, color: colors.ink, marginBottom: 8 }}>¿Cómo te sentiste?</h1>
+        <p style={{ fontFamily: font, color: colors.inkSoft, marginBottom: 24 }}>
+          Esto no mide qué tan "bien hablaste" — nos importa cómo te sentiste practicando.
+        </p>
+        <Card>
+          <Row label="Comodidad durante la conversación" field="comodidad" />
+          <Row label="Confianza al responder" field="confianza" />
+          <Row label="Ganas de participar" field="participacion" />
+          <PrimaryButton disabled={!allRated} onClick={submitRating} style={{ width: "100%", justifyContent: "center" }}>
+            Guardar y terminar
+          </PrimaryButton>
+        </Card>
+      </div>
+    );
+  }
+ 
+  return (
+    <div style={{ maxWidth: 520, margin: "0 auto", padding: "60px 24px 100px", textAlign: "center" }}>
+      <div style={{ fontSize: 40, marginBottom: 12 }}>🎉</div>
+      <h1 style={{ fontFamily: display, fontSize: 24, color: colors.ink }}>¡Buena conversación!</h1>
+      <p style={{ fontFamily: font, color: colors.inkSoft, marginBottom: 20 }}>
+        Respondiste {answers.length} preguntas. Quedó guardado en tu progreso.
+      </p>
+      <GhostButton onClick={goBack}>Volver al inicio</GhostButton>
+    </div>
+  );
+}
+ 
+/* ---------------------- Dashboard / navegación principal ---------------------- */
+function categoryLabel(category) {
+  return { breathing: "Respiración", reading: "Lectura en voz alta", conversation: "Conversación", articulation: "Sonidos y articulación" }[category] || category;
+}
+ 
+/* ---------------------- Cuestionario inicial (autoreporte, no diagnóstico) ---------------------- */
+function OnboardingQuestionnaire({ uid, onDone }) {
+  const [selected, setSelected] = useState([]);
+  const [skipReason, setSkipReason] = useState(false);
+  const [saving, setSaving] = useState(false);
+ 
+  const toggle = (id) => setSelected((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
+ 
+  const save = async (focusAreas) => {
+    setSaving(true);
+    await db.collection("users").doc(uid).set({ focusAreas }, { merge: true });
+    setSaving(false);
+    onDone();
+  };
+ 
+  return (
+    <div style={{ minHeight: "100vh", background: colors.canvas, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ maxWidth: 560, width: "100%" }}>
+        <h1 style={{ fontFamily: display, fontSize: 26, color: colors.ink, marginBottom: 8 }}>
+          Cuéntanos qué te gustaría practicar
+        </h1>
+        <p style={{ fontFamily: font, fontSize: 14, color: colors.inkSoft, lineHeight: 1.6, marginBottom: 20 }}>
+          Esto es solo para sugerirte ejercicios que te queden mejor — nadie más
+          que tú lo ve, y puedes cambiarlo o saltarlo cuando quieras desde tu
+          perfil. Speaksy no diagnostica nada; esto es lo que tú nos cuentas
+          sobre ti, y no reemplaza la evaluación de un profesional del habla.
+        </p>
+        <Card style={{ marginBottom: 16 }}>
+          {FOCUS_AREAS.map((a) => (
+            <label key={a.id} style={{
+              display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 4px",
+              borderBottom: `1px solid ${colors.border}`, cursor: "pointer",
+            }}>
+              <input type="checkbox" checked={selected.includes(a.id)} onChange={() => toggle(a.id)}
+                style={{ marginTop: 3 }} />
+              <div>
+                <div style={{ fontFamily: font, fontWeight: 600, fontSize: 14, color: colors.ink }}>{a.label}</div>
+                {a.desc && <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft }}>{a.desc}</div>}
+              </div>
+            </label>
+          ))}
+        </Card>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <PrimaryButton disabled={saving || selected.length === 0} onClick={() => save(selected)}>
+            {saving ? "Guardando…" : "Continuar"}
+          </PrimaryButton>
+          <GhostButton onClick={() => save(["prefiero_no_decir"])}>Prefiero no decirlo</GhostButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+ 
+/* ---------------------- Sonidos y articulación ---------------------- */
+function ArticulationStage({ target, onDone, label }) {
+  const [status, setStatus] = useState("idle");
+  const [matchedCount, setMatchedCount] = useState(0);
+  const recognitionRef = useRef(null);
+  const recordingRef = useRef(false);
+ 
+  const words = target.split(/\s+/);
+  const targetNormalized = words.map(normalizeWord);
+ 
+  const start = () => {
+    setStatus("recording"); setMatchedCount(0);
+    recordingRef.current = true;
+    if (!SpeechRecognitionAPI) return;
+    const recognition = new SpeechRecognitionAPI();
+    recognition.lang = "es-ES";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.onresult = (e) => {
+      let transcript = "";
+      for (let i = 0; i < e.results.length; i++) transcript += e.results[i][0].transcript + " ";
+      const said = transcript.trim().split(/\s+/).map(normalizeWord);
+      let count = 0;
+      for (let i = 0; i < Math.min(said.length, targetNormalized.length); i++) {
+        if (said[i] && said[i] === targetNormalized[i]) count = i + 1; else break;
+      }
+      setMatchedCount((prev) => Math.max(prev, count));
+    };
+    recognition.onend = () => { if (recordingRef.current) { try { recognition.start(); } catch (e) {} } };
+    recognitionRef.current = recognition;
+    try { recognition.start(); } catch (e) {}
+  };
+ 
+  const stop = () => {
+    recordingRef.current = false;
+    if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch (e) {} }
+    setStatus("done");
+  };
+ 
+  return (
+    <Card style={{ marginBottom: 16 }}>
+      <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginBottom: 8 }}>{label}</div>
+      <p style={{ fontFamily: display, fontSize: 26, letterSpacing: 2, color: colors.ink, marginBottom: 16 }}>
+        {words.map((w, i) => (
+          <span key={i} style={{
+            background: i < matchedCount ? colors.mintSoft : "transparent",
+            color: i < matchedCount ? colors.teal : colors.ink, borderRadius: 5, padding: "1px 4px",
+          }}>{w} </span>
+        ))}
+      </p>
+      <div style={{ display: "flex", gap: 10 }}>
+        {status !== "recording" ? (
+          <PrimaryButton onClick={start}>🎤 Practicar</PrimaryButton>
+        ) : (
+          <GhostButton onClick={stop}>⏹ Listo</GhostButton>
+        )}
+        <GhostButton onClick={() => onDone(matchedCount, words.length)}>Siguiente →</GhostButton>
+      </div>
+      {!SpeechRecognitionAPI && (
+        <p style={{ fontFamily: font, fontSize: 12, color: colors.inkSoft, marginTop: 10 }}>
+          Tu navegador no soporta el resaltado en vivo aquí; igual puedes practicar en voz alta y avanzar.
+        </p>
+      )}
+    </Card>
+  );
+}
+ 
+/* ---------------------- Runner: niveles de respiración ---------------------- */
+function BreathingLevelRunner({ level, onFinish, onExit }) {
+  const phases = [
+    { key: "inhale", label: "INHALA", seconds: 4 },
+    { key: "hold", label: "MANTÉN", seconds: 2 },
+    { key: "exhale", label: "EXHALA", seconds: 6 },
+  ];
+  const [phaseIdx, setPhaseIdx] = useState(0);
+  const [count, setCount] = useState(phases[0].seconds);
+  const [running, setRunning] = useState(false);
+  const [cyclesDone, setCyclesDone] = useState(0);
+  const [spokenCount, setSpokenCount] = useState(0);
+  const startTimeRef = useRef(0);
+  const spokenThisCycleRef = useRef(false);
+  const recognitionRef = useRef(null);
+  const hasWords = !!level.words;
+  const currentWord = hasWords ? level.words[cyclesDone % level.words.length] : null;
+ 
+  const finishNow = (extraCycle) => {
+    const totalCycles = cyclesDone + (extraCycle ? 1 : 0);
+    const elapsed = Math.round((Date.now() - startTimeRef.current) / 1000) || 1;
+    const cycleFraction = Math.min(1, totalCycles / level.cycles);
+    const spokenFraction = hasWords ? Math.min(1, spokenCount / level.cycles) : 1;
+    const fraction = hasWords ? (cycleFraction + spokenFraction) / 2 : cycleFraction;
+    if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch (e) {} }
+    onFinish(fraction, elapsed);
+  };
+ 
+  useEffect(() => {
+    if (!running) return;
+    if (hasWords && phases[phaseIdx].key === "exhale" && SpeechRecognitionAPI) {
+      spokenThisCycleRef.current = false;
+      const recognition = new SpeechRecognitionAPI();
+      recognition.lang = "es-ES";
+      recognition.onresult = () => { spokenThisCycleRef.current = true; };
+      recognition.onerror = () => {};
+      recognitionRef.current = recognition;
+      try { recognition.start(); } catch (e) {}
+    }
+    const t = setInterval(() => {
+      setCount((c) => {
+        if (c <= 1) {
+          const next = (phaseIdx + 1) % phases.length;
+          if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch (e) {} }
+          if (next === 0) {
+            const newCyclesDone = cyclesDone + 1;
+            const newSpokenCount = spokenCount + (spokenThisCycleRef.current ? 1 : 0);
+            setSpokenCount(newSpokenCount);
+            setCyclesDone(newCyclesDone);
+            if (newCyclesDone >= level.cycles) {
+              setRunning(false);
+              setTimeout(() => finishNow(false), 300);
+              return phases[0].seconds;
+            }
+          }
+          setPhaseIdx(next);
+          return phases[next].seconds;
+        }
+        return c - 1;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line
+  }, [running, phaseIdx]);
+ 
+  const phase = phases[phaseIdx];
+  const scale = running ? (phase.key === "exhale" ? 0.62 : 1) : 0.8;
+ 
+  return (
+    <div style={{ textAlign: "center" }}>
+      <p style={{ fontFamily: font, fontSize: 13.5, color: colors.inkSoft, marginBottom: 18 }}>
+        Ciclo {Math.min(cyclesDone + 1, level.cycles)} de {level.cycles}
+      </p>
+      <div style={{ width: 220, height: 220, margin: "0 auto 20px", borderRadius: "50%", position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: `radial-gradient(circle, ${colors.mint} 0%, ${colors.mintSoft} 70%)`, transform: `scale(${scale})`, transition: `transform ${phase.seconds}s ease-in-out` }} />
+        <div style={{ position: "relative", fontFamily: font }}>
+          <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: 2, color: colors.teal }}>{running ? phase.label : "LISTO"}</div>
+          <div style={{ fontFamily: mono, fontSize: 40, fontWeight: 600, color: colors.ink, marginTop: 4 }}>{running ? count : "—"}</div>
+        </div>
+      </div>
+      {hasWords && running && phase.key === "exhale" && (
+        <p style={{ fontFamily: display, fontSize: 20, color: colors.ink, marginBottom: 16 }}>Di: "{currentWord}"</p>
+      )}
+      <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+        {!running ? (
+          <PrimaryButton onClick={() => { setRunning(true); startTimeRef.current = Date.now(); }}>
+            {cyclesDone === 0 ? "Iniciar" : "Continuar"}
+          </PrimaryButton>
+        ) : (
+          <GhostButton onClick={() => setRunning(false)}>Pausar</GhostButton>
+        )}
+        <GhostButton onClick={onExit}>Salir sin guardar</GhostButton>
+        {cyclesDone > 0 && !running && (
+          <GhostButton onClick={() => finishNow(false)}>Terminar aquí</GhostButton>
+        )}
+      </div>
+    </div>
+  );
+}
+ 
+/* ---------------------- Runner: niveles de lectura y articulación (comparten motor) ---------------------- */
+function TextLevelRunner({ level, onFinish }) {
+  const [partIdx, setPartIdx] = useState(0);
+  const [totals, setTotals] = useState({ matched: 0, total: 0 });
+  const startTimeRef = useRef(Date.now());
+ 
+  const handleDone = (matched, total) => {
+    const newTotals = { matched: totals.matched + matched, total: totals.total + total };
+    if (partIdx < level.parts.length - 1) {
+      setTotals(newTotals);
+      setPartIdx(partIdx + 1);
+    } else {
+      const elapsed = Math.round((Date.now() - startTimeRef.current) / 1000) || 1;
+      const fraction = newTotals.total > 0 ? newTotals.matched / newTotals.total : 0;
+      onFinish(fraction, elapsed);
+    }
+  };
+ 
+  return (
+    <ArticulationStage
+      key={partIdx}
+      label={`Parte ${partIdx + 1} de ${level.parts.length}`}
+      target={level.parts[partIdx]}
+      onDone={handleDone}
+    />
+  );
+}
+ 
+/* ---------------------- Runner: niveles de conversación ---------------------- */
+function ConversationLevelRunner({ level, onFinish }) {
+  const [qIndex, setQIndex] = useState(0);
+  const [answeredCount, setAnsweredCount] = useState(0);
+  const [listening, setListening] = useState(false);
+  const [draft, setDraft] = useState("");
+  const startTimeRef = useRef(Date.now());
+ 
+  const startListening = () => {
+    if (!SpeechRecognitionAPI) return;
+    const recognition = new SpeechRecognitionAPI();
+    recognition.lang = "es-ES";
+    recognition.interimResults = false;
+    recognition.onresult = (e) => setDraft(e.results[0][0].transcript);
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+    setListening(true);
+    recognition.start();
+  };
+ 
+  const next = () => {
+    const answered = draft.trim().length > 0;
+    const newCount = answeredCount + (answered ? 1 : 0);
+    setDraft("");
+    if (qIndex + 1 < level.questions.length) {
+      setAnsweredCount(newCount);
+      setQIndex(qIndex + 1);
+    } else {
+      const elapsed = Math.round((Date.now() - startTimeRef.current) / 1000) || 1;
+      onFinish(newCount / level.questions.length, elapsed);
+    }
+  };
+ 
+  return (
+    <div>
+      <p style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginBottom: 8 }}>
+        Pregunta {qIndex + 1} de {level.questions.length}
+      </p>
+      <Card style={{ marginBottom: 18 }}>
+        <p style={{ fontFamily: display, fontSize: 21, color: colors.ink, margin: 0 }}>{level.questions[qIndex]}</p>
+      </Card>
+      {SpeechRecognitionAPI ? (
+        <div style={{ textAlign: "center", marginBottom: 16 }}>
+          {!listening ? (
+            <PrimaryButton onClick={startListening}>🎤 Responder por voz</PrimaryButton>
+          ) : (
+            <Note>Escuchando… habla con calma.</Note>
+          )}
+        </div>
+      ) : (
+        <textarea value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Escribe tu respuesta…"
+          style={{ width: "100%", minHeight: 80, padding: 12, borderRadius: 12, border: `1.5px solid ${colors.border}`, fontFamily: font, fontSize: 14, marginBottom: 16 }} />
+      )}
+      {draft && (
+        <Card style={{ marginBottom: 16, background: colors.mintSoft, border: "none" }}>
+          <p style={{ fontFamily: font, color: colors.ink, margin: 0, fontSize: 13.5 }}>{draft}</p>
+        </Card>
+      )}
+      <PrimaryButton onClick={next}>{qIndex + 1 < level.questions.length ? "Siguiente pregunta →" : "Terminar nivel"}</PrimaryButton>
+    </div>
+  );
+}
+ 
+/* ---------------------- Camino de niveles (estilo Duolingo) ---------------------- */
+function LevelPath({ areaLabel, levels, progress, onSelect, goBack }) {
+  const completedIds = Object.keys(progress).map(Number);
+  const nextAvailable = completedIds.length === 0 ? 1 : Math.min(levels.length, Math.max(...completedIds) + 1);
+ 
+  return (
+    <div style={{ maxWidth: 480, margin: "0 auto", padding: "36px 24px 100px" }}>
+      <button onClick={goBack} style={backLinkStyle}>← Volver</button>
+      <h1 style={{ fontFamily: display, fontSize: 24, color: colors.ink, marginBottom: 24 }}>{areaLabel}</h1>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+        {levels.map((lvl, i) => {
+          const done = progress[lvl.id];
+          const locked = lvl.id > nextAvailable;
+          const current = lvl.id === nextAvailable && !done;
+          return (
+            <div key={lvl.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
+              {i > 0 && <div style={{ width: 2, height: 22, background: colors.border }} />}
+              <button
+                onClick={() => !locked && onSelect(lvl)}
+                disabled={locked}
+                style={{
+                  width: "100%", display: "flex", alignItems: "center", gap: 14, padding: "14px 18px",
+                  borderRadius: 16, border: `1.5px solid ${done ? colors.teal : current ? colors.amber : colors.border}`,
+                  background: locked ? colors.canvas : "#fff", cursor: locked ? "not-allowed" : "pointer",
+                  opacity: locked ? 0.55 : 1, textAlign: "left",
+                }}
+              >
+                <div style={{
+                  width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
+                  background: done ? colors.teal : current ? colors.amberSoft : colors.mintSoft,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontFamily: mono, fontWeight: 700, fontSize: 15,
+                  color: done ? "#fff" : current ? "#8A5A16" : colors.inkSoft,
+                }}>
+                  {done ? "✓" : locked ? "🔒" : lvl.id}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontFamily: font, fontWeight: 700, fontSize: 14.5, color: colors.ink }}>{lvl.title}</div>
+                  <div style={{ fontFamily: font, fontSize: 12, color: colors.inkSoft }}>{lvl.desc}</div>
+                  {done && (
+                    <div style={{ fontFamily: mono, fontSize: 12, color: colors.amber, marginTop: 4 }}>
+                      {"⭐".repeat(done.stars)}{"☆".repeat(3 - done.stars)} · {done.xp} XP
+                    </div>
+                  )}
+                </div>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+ 
+/* ---------------------- Página de niveles por área ---------------------- */
+function LevelsPage({ uid, areaKey, goBack, onSaved }) {
+  const area = LEVEL_AREAS[areaKey];
+  const [progress, setProgress] = useState(null);
+  const [activeLevel, setActiveLevel] = useState(null);
+  const [result, setResult] = useState(null);
+ 
+  const refreshProgress = async () => setProgress(await loadLevelProgress(uid, areaKey));
+  useEffect(() => { refreshProgress(); }, []);
+ 
+  const handleFinish = async (fraction, durationSeconds) => {
+    const stars = starsFor(fraction);
+    const xp = xpForStars(stars);
+    await saveLevelResult(uid, areaKey, activeLevel.id, stars, durationSeconds);
+    setResult({ stars, xp, title: activeLevel.title });
+    setActiveLevel(null);
+    await refreshProgress();
+    onSaved();
+  };
+ 
+  if (progress === null) return <p style={{ padding: 40, textAlign: "center", fontFamily: font, color: colors.inkSoft }}>Cargando…</p>;
+ 
+  if (result) {
+    return (
+      <div style={{ maxWidth: 480, margin: "0 auto", padding: "60px 24px", textAlign: "center" }}>
+        <div style={{ fontSize: 44, marginBottom: 10 }}>{"⭐".repeat(result.stars)}{"☆".repeat(3 - result.stars)}</div>
+        <h1 style={{ fontFamily: display, fontSize: 26, color: colors.ink, marginBottom: 8 }}>¡Nivel completado!</h1>
+        <p style={{ fontFamily: font, color: colors.inkSoft, marginBottom: 6 }}>{result.title}</p>
+        <p style={{ fontFamily: mono, fontSize: 15, color: colors.teal, marginBottom: 26 }}>+{result.xp} XP</p>
+        <PrimaryButton onClick={() => setResult(null)}>Volver al camino</PrimaryButton>
+      </div>
+    );
+  }
+ 
+  if (activeLevel) {
+    return (
+      <div style={{ maxWidth: 560, margin: "0 auto", padding: "36px 24px 100px" }}>
+        <button onClick={() => setActiveLevel(null)} style={backLinkStyle}>← Salir del nivel</button>
+        <h1 style={{ fontFamily: display, fontSize: 22, color: colors.ink, marginBottom: 4 }}>{activeLevel.title}</h1>
+        <p style={{ fontFamily: font, fontSize: 13.5, color: colors.inkSoft, marginBottom: 22 }}>{activeLevel.desc}</p>
+        {areaKey === "breathing" && <BreathingLevelRunner level={activeLevel} onFinish={handleFinish} onExit={() => setActiveLevel(null)} />}
+        {(areaKey === "reading" || areaKey === "articulation") && <TextLevelRunner level={activeLevel} onFinish={handleFinish} />}
+        {areaKey === "conversation" && <ConversationLevelRunner level={activeLevel} onFinish={handleFinish} />}
+      </div>
+    );
+  }
+ 
+  return <LevelPath areaLabel={area.label} levels={area.levels} progress={progress} onSelect={setActiveLevel} goBack={goBack} />;
+}
+ 
+/* ---------------------- Selector de las 4 áreas con niveles ---------------------- */
+function LevelAreasHome({ uid, navigate }) {
+  const [summaries, setSummaries] = useState(null);
+ 
+  useEffect(() => {
+    Promise.all(Object.keys(LEVEL_AREAS).map((k) => loadLevelProgress(uid, k).then((p) => [k, p])))
+      .then((pairs) => setSummaries(Object.fromEntries(pairs)));
+  }, []);
+ 
+  return (
+    <div style={{ maxWidth: 640, margin: "0 auto", padding: "36px 24px 100px" }}>
+      <h1 style={{ fontFamily: display, fontSize: 28, color: colors.ink, marginBottom: 6 }}>Niveles</h1>
+      <p style={{ fontFamily: font, fontSize: 13.5, color: colors.inkSoft, marginBottom: 24 }}>
+        Completa un nivel para desbloquear el siguiente, en cada área.
+      </p>
+      <div style={{ display: "grid", gap: 12 }}>
+        {Object.entries(LEVEL_AREAS).map(([key, area]) => {
+          const done = summaries ? Object.keys(summaries[key] || {}).length : 0;
+          return (
+            <button key={key} onClick={() => navigate("levels-" + key)} style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              padding: "18px 20px", borderRadius: 16, border: `1.5px solid ${colors.border}`,
+              background: "#fff", cursor: "pointer", fontFamily: font, textAlign: "left",
+            }}>
+              <span style={{ fontWeight: 700, fontSize: 15.5, color: colors.ink }}>{area.label}</span>
+              <span style={{ fontFamily: mono, fontSize: 12.5, color: colors.inkSoft }}>
+                {summaries ? `${done}/${area.levels.length}` : "…"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+ 
+function ArticulationPage({ uid, onSaved, goBack }) {
+  const [sound, setSound] = useState(null);
+  const [stageIdx, setStageIdx] = useState(0);
+  const [totals, setTotals] = useState({ matched: 0, total: 0 });
+  const stages = ["syllables", "words", "phrase"];
+  const stageLabels = { syllables: "Sílabas", words: "Palabras", phrase: "Frase" };
+ 
+  const finishStage = (matched, total) => {
+    setTotals((t) => ({ matched: t.matched + matched, total: t.total + total }));
+    if (stageIdx < stages.length - 1) {
+      setStageIdx(stageIdx + 1);
+    } else {
+      saveSession(uid, {
+        category: "articulation", durationSeconds: 0,
+        extra: { sound, wordsMatched: totals.matched + matched, totalWords: totals.total + total },
+      }).then(onSaved);
+      setStageIdx(stages.length); // pantalla final
+    }
+  };
+ 
+  if (!sound) {
+    return (
+      <div style={{ maxWidth: 620, margin: "0 auto", padding: "40px 24px 100px" }}>
+        <button onClick={goBack} style={backLinkStyle}>← Volver</button>
+        <h1 style={{ fontFamily: display, fontSize: 26, color: colors.ink, marginBottom: 8 }}>Sonidos y articulación</h1>
+        <p style={{ fontFamily: font, fontSize: 14, color: colors.inkSoft, marginBottom: 20 }}>
+          Elige un sonido para practicar: primero en sílabas, después en
+          palabras, y por último en una frase completa.
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          {Object.entries(SOUND_BANK).map(([id, s]) => (
+            <button key={id} onClick={() => { setSound(id); setStageIdx(0); setTotals({ matched: 0, total: 0 }); }} style={{
+              textAlign: "left", padding: "14px", borderRadius: 14, border: `1.5px solid ${colors.border}`,
+              background: "#fff", cursor: "pointer", fontFamily: font,
+            }}>
+              <div style={{ fontWeight: 700, color: colors.ink, fontSize: 14 }}>{s.label}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+ 
+  const data = SOUND_BANK[sound];
+  const targets = { syllables: data.syllables, words: data.words, phrase: data.phrase };
+ 
+  return (
+    <div style={{ maxWidth: 620, margin: "0 auto", padding: "40px 24px 100px" }}>
+      <button onClick={() => setSound(null)} style={backLinkStyle}>← Elegir otro sonido</button>
+      <h1 style={{ fontFamily: display, fontSize: 24, color: colors.ink, marginBottom: 16 }}>{data.label}</h1>
+ 
+      {stageIdx < stages.length ? (
+        <ArticulationStage
+          key={stages[stageIdx]}
+          label={`Paso ${stageIdx + 1} de ${stages.length} · ${stageLabels[stages[stageIdx]]}`}
+          target={targets[stages[stageIdx]]}
+          onDone={finishStage}
+        />
+      ) : (
+        <Card>
+          <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 10 }}>¡Listo!</div>
+          <Note>
+            Guardamos tu práctica de este sonido en tu cuenta. Puedes repetirlo
+            cuantas veces quieras o elegir otro sonido.
+          </Note>
+        </Card>
+      )}
+    </div>
+  );
+}
+ 
+function recommendationsFor(focusAreas) {
+  if (!focusAreas || focusAreas.length === 0 || focusAreas.includes("prefiero_no_decir")) return [];
+  const chosen = FOCUS_AREAS.filter((a) => focusAreas.includes(a.id));
+  const pages = new Set();
+  chosen.forEach((a) => a.recommend.forEach((p) => pages.add(p)));
+  const PAGE_INFO = {
+    breathing: { page: "breathing", label: "Respiración", blurb: "Ritmo de respiración guiado, útil como base antes de hablar." },
+    reading: { page: "reading", label: "Lectura pausada", blurb: "Elige nivel fácil y ve a tu ritmo, sin presión de velocidad." },
+    articulation: { page: "articulation", label: "Sonidos y articulación", blurb: "Practica un sonido específico: sílabas → palabras → frase." },
+  };
+  return [...pages].map((p) => PAGE_INFO[p]).filter(Boolean);
+}
+ 
+function Dashboard({ user, stats, refresh, navigate, focusAreas, xp }) {
+  const recs = recommendationsFor(focusAreas);
+  const recent = stats.sessions.slice(0, 5);
+  const level = levelFor(xp || 0);
+  return (
+    <div style={{ maxWidth: 900, margin: "0 auto", padding: "36px 24px 90px" }}>
+      <h1 style={{ fontFamily: display, fontSize: 28, color: colors.ink, marginBottom: 2 }}>Hola, {user.name || user.email}.</h1>
+      <p style={{ fontFamily: font, color: colors.inkSoft, marginBottom: 26 }}>¿Lista para practicar?</p>
+ 
+      <Card style={{ marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <Pill>Nivel {level.number} · {level.title}</Pill>
+          <div style={{ fontFamily: mono, fontSize: 13, color: colors.inkSoft, marginTop: 8 }}>
+            {xp || 0} XP{level.next ? ` · faltan ${level.next.min - (xp || 0)} para "${level.next.title}"` : " · nivel máximo"}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <GhostButton onClick={() => navigate("levels")}>Ver niveles</GhostButton>
+          <GhostButton onClick={() => navigate("leaderboard")}>Ver ranking</GhostButton>
+        </div>
+      </Card>
+ 
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 24 }}>
+        <StatCard label="Sesiones realizadas" value={stats.totalSessions} />
+        <StatCard label="Minutos practicados" value={stats.totalMinutes} />
+        <StatCard label="Días seguidos" value={`🔥 ${stats.streak}`} />
+      </div>
+ 
+      <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
+        <PrimaryButton onClick={() => navigate("breathing")}>Practicar respiración</PrimaryButton>
+        <GhostButton onClick={() => navigate("reading")}>Practicar lectura</GhostButton>
+        <GhostButton onClick={() => navigate("conversation")}>Modo conversación</GhostButton>
+        <GhostButton onClick={() => navigate("articulation")}>Sonidos y articulación</GhostButton>
+      </div>
+ 
+      {recs.length > 0 && (
+        <Card style={{ marginBottom: 24 }}>
+          <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 12 }}>Recomendado para ti</div>
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${recs.length}, 1fr)`, gap: 12 }}>
+            {recs.map((r) => (
+              <div key={r.page} onClick={() => navigate(r.page)} style={{
+                border: `1.5px solid ${colors.border}`, borderRadius: 14, padding: 14, cursor: "pointer",
+              }}>
+                <div style={{ fontFamily: font, fontWeight: 600, fontSize: 14, color: colors.ink, marginBottom: 4 }}>{r.label}</div>
+                <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft }}>{r.blurb}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+ 
+      <Card>
+        <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 12 }}>Actividad reciente</div>
+        {recent.length === 0 && <p style={{ fontFamily: font, fontSize: 13.5, color: colors.inkSoft }}>Todavía no hay sesiones. ¡Empieza con una!</p>}
+        {recent.map((s) => (
+          <div key={s.id} style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderBottom: `1px solid ${colors.border}`, fontFamily: font, fontSize: 13.5 }}>
+            <span style={{ color: colors.ink }}>{categoryLabel(s.category)}</span>
+            <span style={{ color: colors.inkSoft }}>{Math.round((s.duration || 0) / 60) || "<1"} min</span>
+          </div>
+        ))}
+      </Card>
+    </div>
+  );
+}
+ 
+/* ---------------------- Ranking (opcional, por XP de constancia) ---------------------- */
+function LeaderboardPage({ uid }) {
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState("");
+ 
+  useEffect(() => {
+    db.collection("leaderboard").orderBy("xp", "desc").limit(20).get()
+      .then((snap) => setRows(snap.docs.map((d) => ({ id: d.id, ...d.data() }))))
+      .catch((e) => setError(e.message));
+  }, []);
+ 
+  return (
+    <div style={{ maxWidth: 640, margin: "0 auto", padding: "36px 24px 100px" }}>
+      <h1 style={{ fontFamily: display, fontSize: 28, color: colors.ink, marginBottom: 6 }}>Ranking de constancia</h1>
+      <p style={{ fontFamily: font, fontSize: 13.5, color: colors.inkSoft, marginBottom: 24 }}>
+        Por XP de práctica — no mide qué tan fluida es la voz de nadie, solo
+        quién ha sido más constante. Aparecer aquí es opcional (Perfil →
+        Privacidad y permisos).
+      </p>
+      {error && <Note tone="danger">{error}</Note>}
+      {!error && rows === null && <p style={{ fontFamily: font, color: colors.inkSoft }}>Cargando…</p>}
+      {rows && rows.length === 0 && (
+        <Note>Todavía nadie se unió al ranking. ¡Sé la primera persona en aparecer!</Note>
+      )}
+      {rows && rows.length > 0 && (
+        <Card>
+          {rows.map((r, i) => (
+            <div key={r.id} style={{
+              display: "flex", alignItems: "center", gap: 14, padding: "12px 0",
+              borderBottom: i < rows.length - 1 ? `1px solid ${colors.border}` : "none",
+              background: r.id === uid ? colors.mintSoft : "transparent",
+            }}>
+              <div style={{ fontFamily: mono, fontWeight: 600, color: colors.teal, width: 28, textAlign: "center" }}>
+                {i + 1}
+              </div>
+              <div style={{ flex: 1, fontFamily: font, fontWeight: 600, color: colors.ink, fontSize: 14 }}>
+                {r.displayName}{r.id === uid ? " (tú)" : ""}
+              </div>
+              <div style={{ fontFamily: mono, fontSize: 13, color: colors.inkSoft }}>{r.xp || 0} XP</div>
+            </div>
+          ))}
+        </Card>
+      )}
+    </div>
+  );
+}
+ 
+function AchievementsPage({ stats }) {
+  return (
+    <div style={{ maxWidth: 800, margin: "0 auto", padding: "36px 24px 90px" }}>
+      <h1 style={{ fontFamily: display, fontSize: 28, color: colors.ink, marginBottom: 24 }}>Logros</h1>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
+        {ACHIEVEMENTS.map((a) => {
+  const unlocked = stats.unlockedIds.has(a.id);
+  return (
+    <Card key={a.id} style={{ textAlign: "center", opacity: unlocked ? 1 : 0.4 }}>
+      <img src={a.image} alt={a.name} style={{ width: 80, height: 80, objectFit: "cover", borderRadius: 12, marginBottom: 10 }} />
+      <div style={{ fontFamily: font, fontWeight: 600, fontSize: 13.5, color: colors.ink }}>{a.name}</div>
+    </Card>
+  );
+})}
+      </div>
+    </div>
+  );
+}
+ 
+/* ---------------------- App con sesión iniciada ---------------------- */
+/* ---------------------- Perfil y configuración ---------------------- */
+function ProfilePage({ uid, profile, onSaved }) {
+  const [name, setName] = useState(profile.name || "");
+  const [nameSaved, setNameSaved] = useState(false);
+  const [editingFocus, setEditingFocus] = useState(false);
+  const [focusSelection, setFocusSelection] = useState(profile.focusAreas || []);
+  const [allowAnalysis, setAllowAnalysis] = useState(!!profile.allowPronunciationAnalysis);
+  const [showOnLeaderboard, setShowOnLeaderboard] = useState(!!profile.showOnLeaderboard);
+  const [saving, setSaving] = useState(false);
+ 
+  const saveName = async () => {
+    setSaving(true);
+    await db.collection("users").doc(uid).set({ name }, { merge: true });
+    setSaving(false);
+    setNameSaved(true);
+    onSaved();
+    setTimeout(() => setNameSaved(false), 2000);
+  };
+ 
+  const toggleFocus = (id) => setFocusSelection((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
+ 
+  const saveFocus = async () => {
+    setSaving(true);
+    await db.collection("users").doc(uid).set({ focusAreas: focusSelection }, { merge: true });
+    setSaving(false);
+    setEditingFocus(false);
+    onSaved();
+  };
+ 
+  const toggleAnalysisPermission = async () => {
+    const next = !allowAnalysis;
+    setAllowAnalysis(next);
+    await db.collection("users").doc(uid).set({ allowPronunciationAnalysis: next }, { merge: true });
+    onSaved();
+  };
+ 
+  const toggleLeaderboard = async () => {
+    const next = !showOnLeaderboard;
+    setShowOnLeaderboard(next);
+    await db.collection("users").doc(uid).set({ showOnLeaderboard: next }, { merge: true });
+    if (next) {
+      await db.collection("leaderboard").doc(uid).set({
+        displayName: profile.name || "Alguien practicando",
+        xp: profile.xp || 0,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    } else {
+      await db.collection("leaderboard").doc(uid).delete().catch(() => {});
+    }
+    onSaved();
+  };
+ 
+  const currentFocusLabels = (profile.focusAreas || [])
+    .map((id) => FOCUS_AREAS.find((a) => a.id === id))
+    .filter(Boolean);
+ 
+  return (
+    <div style={{ maxWidth: 640, margin: "0 auto", padding: "36px 24px 100px" }}>
+      <h1 style={{ fontFamily: display, fontSize: 28, color: colors.ink, marginBottom: 24 }}>Perfil y configuración</h1>
+ 
+      <Card style={{ marginBottom: 18 }}>
+        <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 4 }}>Cómo quieres que te llamemos</div>
+        <p style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginBottom: 14 }}>
+          Este nombre aparece en tu saludo del panel principal.
+        </p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tu nombre"
+            style={{ ...inputStyle, marginBottom: 0, flex: 1, minWidth: 180 }} />
+          <PrimaryButton onClick={saveName} disabled={saving || !name.trim()}>Guardar</PrimaryButton>
+        </div>
+        {nameSaved && <div style={{ marginTop: 10 }}><Note>Listo, así te llamaremos de ahora en adelante.</Note></div>}
+      </Card>
+ 
+      <Card style={{ marginBottom: 18 }}>
+        <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 4 }}>Tu enfoque de práctica</div>
+        <p style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginBottom: 14 }}>
+          Lo que nos contaste al registrarte — puedes cambiarlo cuando quieras. Esto es información tuya, no un diagnóstico.
+        </p>
+        {!editingFocus ? (
+          <div>
+            {currentFocusLabels.length === 0 ? (
+              <p style={{ fontFamily: font, fontSize: 13.5, color: colors.inkSoft }}>Elegiste no decirlo — sin problema.</p>
+            ) : (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+                {currentFocusLabels.map((a) => <Pill key={a.id}>{a.label}</Pill>)}
+              </div>
+            )}
+            <GhostButton onClick={() => { setFocusSelection(profile.focusAreas || []); setEditingFocus(true); }}>
+              Editar respuestas
+            </GhostButton>
+          </div>
+        ) : (
+          <div>
+            {FOCUS_AREAS.map((a) => (
+              <label key={a.id} style={{
+                display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 4px",
+                borderBottom: `1px solid ${colors.border}`, cursor: "pointer",
+              }}>
+                <input type="checkbox" checked={focusSelection.includes(a.id)} onChange={() => toggleFocus(a.id)} style={{ marginTop: 3 }} />
+                <div>
+                  <div style={{ fontFamily: font, fontWeight: 600, fontSize: 13.5, color: colors.ink }}>{a.label}</div>
+                  {a.desc && <div style={{ fontFamily: font, fontSize: 12, color: colors.inkSoft }}>{a.desc}</div>}
+                </div>
+              </label>
+            ))}
+            <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+              <PrimaryButton onClick={saveFocus} disabled={saving}>Guardar cambios</PrimaryButton>
+              <GhostButton onClick={() => setEditingFocus(false)}>Cancelar</GhostButton>
+            </div>
+          </div>
+        )}
+      </Card>
+ 
+      <Card>
+        <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 4 }}>Privacidad y permisos</div>
+        <p style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginBottom: 16 }}>
+          El micrófono en sí lo controla tu navegador (candado en la barra de
+          direcciones) — esto de aquí es sobre qué hace Speaksy con lo que grabas.
+        </p>
+        <label style={{ display: "flex", gap: 12, alignItems: "flex-start", cursor: "pointer" }}>
+          <input type="checkbox" checked={allowAnalysis} onChange={toggleAnalysisPermission} style={{ marginTop: 3 }} />
+          <div>
+            <div style={{ fontFamily: font, fontWeight: 600, fontSize: 13.5, color: colors.ink }}>
+              Permitir análisis de pronunciación con un servicio externo (Azure)
+            </div>
+            <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginTop: 3, lineHeight: 1.5 }}>
+              Solo cuando presionas "Grabar y analizar" en Lectura, tu audio de esa
+              grabación se envía a Azure para calcular exactitud, fluidez y
+              completitud. Si esto está apagado, esa función queda desactivada.
+              El resaltado en vivo mientras lees no depende de esto — ese usa el
+              reconocimiento de voz del navegador, nunca sale de tu dispositivo.
+            </div>
+          </div>
+        </label>
+ 
+        <div style={{ borderTop: `1px solid ${colors.border}`, margin: "16px 0" }} />
+ 
+        <label style={{ display: "flex", gap: 12, alignItems: "flex-start", cursor: "pointer" }}>
+          <input type="checkbox" checked={showOnLeaderboard} onChange={toggleLeaderboard} style={{ marginTop: 3 }} />
+          <div>
+            <div style={{ fontFamily: font, fontWeight: 600, fontSize: 13.5, color: colors.ink }}>
+              Aparecer en el ranking de constancia con otros usuarios
+            </div>
+            <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginTop: 3, lineHeight: 1.5 }}>
+              El ranking ordena por XP de práctica (constancia), nunca por qué
+              tan fluida es la voz de alguien. Si activas esto, tu nombre y tu
+              XP se vuelven visibles para otros usuarios de Speaksy. Puedes
+              apagarlo cuando quieras y desaparecerás del ranking.
+            </div>
+          </div>
+        </label>
+      </Card>
+    </div>
+  );
+}
+ 
+function TopBar({ page, navigate, onLogout }) {
+  const items = [["dashboard", "Inicio"], ["levels", "Niveles"], ["leaderboard", "Ranking"], ["achievements", "Logros"], ["profile", "Perfil"]];
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 24px", borderBottom: `1px solid ${colors.border}`, background: colors.card, fontFamily: font }}>
+      <div onClick={() => navigate("dashboard")} style={{ fontFamily: display, fontWeight: 600, fontSize: 20, color: colors.ink, cursor: "pointer" }}>Speaksy</div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        {items.map(([id, label]) => {
+          const active = page === id || (id === "levels" && page.startsWith("levels"));
+          return (
+            <button key={id} onClick={() => navigate(id)} style={{
+              background: active ? colors.mintSoft : "transparent", color: active ? colors.teal : colors.inkSoft,
+              border: "none", borderRadius: 999, padding: "8px 14px", fontFamily: font, fontWeight: 600, fontSize: 13.5, cursor: "pointer",
+            }}>{label}</button>
+          );
+        })}
+        <button onClick={onLogout} style={{ background: "none", border: "none", color: colors.inkSoft, fontFamily: font, fontSize: 13, cursor: "pointer", marginLeft: 6 }}>Salir</button>
+      </div>
+    </div>
+  );
+}
+ 
+function LoggedInApp({ authUser }) {
+  const [page, setPage] = useState("dashboard");
+  const [profile, setProfile] = useState(null);
+  const [stats, setStats] = useState({ sessions: [], totalSessions: 0, totalMinutes: 0, streak: 0, unlockedIds: new Set() });
+  const [loading, setLoading] = useState(true);
+ 
+  const refresh = async () => {
+    const doc = await db.collection("users").doc(authUser.uid).get();
+    setProfile(doc.data() || { email: authUser.email });
+    const s = await loadStats(authUser.uid);
+    setStats(s);
+    setLoading(false);
+  };
+ 
+  useEffect(() => { refresh(); }, []);
+ 
+  if (loading) return <div style={{ padding: 60, textAlign: "center", fontFamily: font, color: colors.inkSoft }}>Cargando tu progreso…</div>;
+ 
+  if (!profile.focusAreas) {
+    return <OnboardingQuestionnaire uid={authUser.uid} onDone={refresh} />;
+  }
+ 
+  const user = { name: profile.name, email: profile.email };
+ 
+  return (
+    <div style={{ background: colors.canvas, minHeight: "100vh" }}>
+      <TopBar page={page} navigate={setPage} onLogout={() => auth.signOut()} />
+      {page === "dashboard" && <Dashboard user={user} stats={stats} refresh={refresh} navigate={setPage} focusAreas={profile.focusAreas} xp={profile.xp || 0} />}
+      {page === "breathing" && <BreathingPage uid={authUser.uid} onSaved={refresh} goBack={() => setPage("dashboard")} />}
+      {page === "reading" && <ReadingPage uid={authUser.uid} onSaved={refresh} goBack={() => setPage("dashboard")} allowAnalysis={!!profile.allowPronunciationAnalysis} />}
+      {page === "conversation" && <ConversationPage uid={authUser.uid} onSaved={refresh} goBack={() => setPage("dashboard")} />}
+      {page === "articulation" && <ArticulationPage uid={authUser.uid} onSaved={refresh} goBack={() => setPage("dashboard")} />}
+      {page === "achievements" && <AchievementsPage stats={stats} />}
+      {page === "leaderboard" && <LeaderboardPage uid={authUser.uid} />}
+      {page === "levels" && <LevelAreasHome uid={authUser.uid} navigate={setPage} />}
+      {page === "levels-breathing" && <LevelsPage uid={authUser.uid} areaKey="breathing" goBack={() => setPage("levels")} onSaved={refresh} />}
+      {page === "levels-reading" && <LevelsPage uid={authUser.uid} areaKey="reading" goBack={() => setPage("levels")} onSaved={refresh} />}
+      {page === "levels-conversation" && <LevelsPage uid={authUser.uid} areaKey="conversation" goBack={() => setPage("levels")} onSaved={refresh} />}
+      {page === "levels-articulation" && <LevelsPage uid={authUser.uid} areaKey="articulation" goBack={() => setPage("levels")} onSaved={refresh} />}
+      {page === "profile" && <ProfilePage uid={authUser.uid} profile={profile} onSaved={refresh} />}
+    </div>
+  );
+}
+ 
+/* ---------------------- Raíz ---------------------- */
+function Root() {
+  const [authUser, setAuthUser] = useState(undefined); // undefined = cargando, null = sin sesión
+ 
+  useEffect(() => {
+    if (!firebaseOk) { setAuthUser(null); return; }
+    return auth.onAuthStateChanged(setAuthUser);
+  }, []);
+ 
+  if (!firebaseOk) return <SetupNeeded />;
+  if (authUser === undefined) return <div style={{ padding: 60, textAlign: "center", fontFamily: font }}>Cargando…</div>;
+  if (authUser === null) return <AuthScreen />;
+  return <LoggedInApp authUser={authUser} />;
+}
+ 
+ReactDOM.createRoot(document.getElementById("root")).render(<Root />);
+</script>
+ 
+<script>
+// Transformamos el bloque de arriba a mano, forzando el modo "clásico" de
+// JSX (React.createElement) en vez del modo "automático" (que usa `import`
+// y no funciona dentro de un <script> normal en el navegador).
+(function () {
+  const source = document.getElementById("app-source").textContent;
+  const output = Babel.transform(source, {
+    presets: [["react", { runtime: "classic" }]],
+  }).code;
+  const script = document.createElement("script");
+  script.textContent = output;
+  document.body.appendChild(script);
+})();
+</script>
+</body>
+</html>

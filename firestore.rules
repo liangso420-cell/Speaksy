@@ -1,0 +1,21 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Usuarios solo leen/escriben sus propios datos
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+      
+      // Subcolecciones del usuario
+      match /{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+
+    // Ranking público (lectura libre, escritura solo tu fila)
+    match /leaderboard/{uid} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}
