@@ -1485,14 +1485,46 @@ function LevelPath({ areaLabel, levels, progress, onSelect, goBack }) {
                   fontFamily: mono, fontWeight: 700, fontSize: 15,
                   color: done ? "#fff" : current ? "#8A5A16" : colors.inkSoft,
                 }}>
-                  {done ? "✓" : locked ? "🔒" : lvl.id}
+                  {done ? "✓" : locked ? (
+  <img
+    src="fotos/candado.png"
+    alt="Bloqueado"
+    style={{
+      width: 20,
+      height: 20,
+      objectFit: "contain",
+    }}
+  />
+) : lvl.id}
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontFamily: font, fontWeight: 700, fontSize: 14.5, color: colors.ink }}>{lvl.title}</div>
                   <div style={{ fontFamily: font, fontSize: 12, color: colors.inkSoft }}>{lvl.desc}</div>
                   {done && (
                     <div style={{ fontFamily: mono, fontSize: 12, color: colors.amber, marginTop: 4 }}>
-                      {"⭐".repeat(done.stars)}{"☆".repeat(3 - done.stars)} · {done.xp} XP
+                     <div style={{
+  display: "flex",
+  alignItems: "center",
+  gap: 3,
+  marginTop: 4,
+}}>
+  {Array.from({ length: 3 }).map((_, index) => (
+    <img
+      key={index}
+      src="fotos/Logros.png"
+      alt="Estrella"
+      style={{
+        width: 16,
+        height: 16,
+        objectFit: "contain",
+        opacity: index < done.stars ? 1 : 0.25,
+      }}
+    />
+  ))}
+  <span style={{ marginLeft: 3 }}>
+    · {done.xp} XP
+  </span>
+</div>
                     </div>
                   )}
                 </div>
@@ -1781,7 +1813,16 @@ function CourseDetailPage({ areaKey, uid, navigate, goBack }) {
       )}
       <div style={{ display: "grid", gap: 14, marginTop: 20 }}>
         <Card style={{ textAlign: "left", display: "flex", alignItems: "center", gap: 16 }}>
-          <div style={{ fontSize: 26 }}>🧘</div>
+          <img
+  src="fotos/meditar.png"
+  alt="Practicar"
+  style={{
+    width: 45,
+    height: 45,
+    objectFit: "contain",
+    flexShrink: 0,
+  }}
+/>
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: font, fontWeight: 700, fontSize: 15, color: colors.ink }}>Practicar</div>
             <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft }}>Práctica libre, sin desbloqueos ni secuencia. Repite cuando quieras.</div>
@@ -1789,7 +1830,16 @@ function CourseDetailPage({ areaKey, uid, navigate, goBack }) {
           <PrimaryButton onClick={() => navigate(c.practicePage)}>Practicar</PrimaryButton>
         </Card>
         <Card style={{ textAlign: "left", display: "flex", alignItems: "center", gap: 16 }}>
-          <div style={{ fontSize: 26 }}>🏆</div>
+          <img
+  src="fotos/trofeo.png"
+  alt="Niveles"
+  style={{
+    width: 45,
+    height: 45,
+    objectFit: "contain",
+    flexShrink: 0,
+  }}
+/>
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: font, fontWeight: 700, fontSize: 15, color: colors.ink }}>Niveles</div>
             <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft }}>Progresión estructurada, con estrellas y XP. Completa un nivel para desbloquear el siguiente.</div>
