@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -6,17 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Speaksy</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
- 
+<link rel="icon" type="image/png" href="fotos/Logo.png">
+
 <!-- React (sin necesidad de instalar nada) -->
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
- 
+
 <!-- Firebase (SDK compat: pensado para usarse directo con <script>, sin backend propio) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
- 
+
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; }
@@ -24,10 +24,10 @@
 </head>
 <body>
 <div id="root"></div>
- 
+
 <script type="text/plain" id="app-source">
 const { useState, useEffect, useRef } = React;
- 
+
 /* =========================================================
    1) CONFIGURACIÓN DE FIREBASE — reemplaza esto con lo tuyo
    (Consola de Firebase > Configuración del proyecto > tus apps > SDK setup)
@@ -42,7 +42,7 @@ const firebaseConfig = {
   messagingSenderId: "147378306428",
   appId: "1:147378306428:web:8a90af3c1e214268b678f9",
 };
- 
+
 let firebaseOk = false;
 try {
   firebase.initializeApp(firebaseConfig);
@@ -52,12 +52,12 @@ try {
 }
 const auth = firebaseOk ? firebase.auth() : null;
 const db = firebaseOk ? firebase.firestore() : null;
- 
+
 // URL de tu Cloud Function de análisis de pronunciación (ver functions/index.js
 // y STATUS.md). Queda vacía hasta que despliegues la función; mientras tanto
 // el botón de "Análisis de pronunciación (beta)" se muestra desactivado.
 const FUNCTIONS_URL = "https://us-central1-speaksy-9c32d.cloudfunctions.net/assessPronunciation";
- 
+
 /* ---------------------- Diseño / tokens ---------------------- */
 const colors = {
   ink: "#16302B", inkSoft: "#4B615C", canvas: "#F5F8F6", card: "#FFFFFF",
@@ -65,7 +65,7 @@ const colors = {
   amber: "#E3A34E", amberSoft: "#FBEAD2", border: "#DCE6E2", danger: "#B3452F",
 };
 const font = "Inter, sans-serif", display = "Fraunces, serif", mono = "'IBM Plex Mono', monospace";
- 
+
 function Card({ children, style }) {
   return <div style={{ background: colors.card, border: `1px solid ${colors.border}`, borderRadius: 20, padding: 24, ...style }}>{children}</div>;
 }
@@ -108,7 +108,7 @@ function StatCard({ label, value }) {
     </Card>
   );
 }
- 
+
 /* ---------------------- Pantalla: sin Firebase configurado ---------------------- */
 function SetupNeeded() {
   return (
@@ -125,7 +125,7 @@ function SetupNeeded() {
     </div>
   );
 }
- 
+
 /* ---------------------- Autenticación ---------------------- */
 function AuthScreen() {
   const [mode, setMode] = useState("login");
@@ -134,7 +134,7 @@ function AuthScreen() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
- 
+
   const submit = async (e) => {
     e.preventDefault();
     setError(""); setLoading(true);
@@ -154,7 +154,7 @@ function AuthScreen() {
     }
     setLoading(false);
   };
- 
+
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: colors.canvas, fontFamily: font }}>
       <Card style={{ width: 360 }}>
@@ -200,13 +200,13 @@ function traducirErrorFirebase(code) {
   };
   return m[code];
 }
- 
+
 /* ---------------------- Firestore: helpers de datos reales ---------------------- */
 function todayKey() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
- 
+
 /* ---------------------- Niveles por constancia (XP), no por "fluidez" ----------------------
    A propósito NO rankeamos por qué tan fluida es la voz de alguien — eso
    sería comparar discapacidades del habla entre sí. Rankeamos por
@@ -230,7 +230,7 @@ function levelFor(xp) {
 function xpForSession(durationSeconds) {
   return 20 + Math.round(durationSeconds / 10); // fijo por completar + un poco por duración
 }
- 
+
 async function saveSession(uid, { category, durationSeconds, extra }) {
   const sessionsRef = db.collection("users").doc(uid).collection("sessions");
   await sessionsRef.add({
@@ -242,11 +242,11 @@ async function saveSession(uid, { category, durationSeconds, extra }) {
     minutes: firebase.firestore.FieldValue.increment(Math.round(durationSeconds / 60)),
     sessions: firebase.firestore.FieldValue.increment(1),
   }, { merge: true });
- 
+
   const xpGained = xpForSession(durationSeconds);
   const userRef = db.collection("users").doc(uid);
   await userRef.set({ xp: firebase.firestore.FieldValue.increment(xpGained) }, { merge: true });
- 
+
   // Si el usuario optó por aparecer en el ranking, mantenemos su copia pública al día.
   const profileSnap = await userRef.get();
   const profile = profileSnap.data() || {};
@@ -257,10 +257,10 @@ async function saveSession(uid, { category, durationSeconds, extra }) {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
   }
- 
+
   await checkAchievements(uid);
 }
- 
+
 const ACHIEVEMENTS = [
   { id: "first_session", image: "fotos/primerasecion.png", name: "Primera sesión", check: (s) => s.totalSessions >= 1 },
   { id: "streak_3", image: "fotos/3diaslogrados.png", name: "3 días practicando", check: (s) => s.streak >= 3 },
@@ -269,7 +269,7 @@ const ACHIEVEMENTS = [
   { id: "sessions_30", image: "fotos/primeras30seciones.png", name: "30 sesiones", check: (s) => s.totalSessions >= 30 },
   { id: "first_conversation", image: "fotos/primeraconversacion.png", name: "Primera conversación", check: (s) => s.sessions.some((x) => x.category === "conversation") },
 ];
- 
+
 async function checkAchievements(uid) {
   const stats = await loadStats(uid);
   const unlockedRef = db.collection("users").doc(uid).collection("achievements");
@@ -281,14 +281,14 @@ async function checkAchievements(uid) {
     }
   }
 }
- 
+
 async function loadStats(uid) {
   const sessionsSnap = await db.collection("users").doc(uid).collection("sessions")
     .orderBy("createdAt", "desc").limit(200).get();
   const sessions = sessionsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
   const totalSessions = sessions.length;
   const totalMinutes = Math.round(sessions.reduce((sum, s) => sum + (s.duration || 0), 0) / 60);
- 
+
   const dailySnap = await db.collection("users").doc(uid).collection("daily").get();
   const dailyDates = new Set(dailySnap.docs.map((d) => d.id));
   let streak = 0;
@@ -297,13 +297,13 @@ async function loadStats(uid) {
     const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
     if (dailyDates.has(key)) { streak++; cursor.setDate(cursor.getDate() - 1); } else break;
   }
- 
+
   const achSnap = await db.collection("users").doc(uid).collection("achievements").get();
   const unlockedIds = new Set(achSnap.docs.map((d) => d.id));
- 
+
   return { sessions, totalSessions, totalMinutes, streak, unlockedIds };
 }
- 
+
 /* ---------------------- Ejercicio: respiración ---------------------- */
 function BreathingRing({ size = 220, onFinish }) {
   const phases = [
@@ -315,7 +315,7 @@ function BreathingRing({ size = 220, onFinish }) {
   const [count, setCount] = useState(phases[0].seconds);
   const [running, setRunning] = useState(false);
   const elapsedRef = useRef(0);
- 
+
   useEffect(() => {
     if (!running) return;
     const t = setInterval(() => {
@@ -328,10 +328,10 @@ function BreathingRing({ size = 220, onFinish }) {
     return () => clearInterval(t);
     // eslint-disable-next-line
   }, [running, phaseIdx]);
- 
+
   const phase = phases[phaseIdx];
   const scale = running ? (phase.key === "exhale" ? 0.62 : 1) : 0.8;
- 
+
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 18 }}>
       <div style={{ width: size, height: size, borderRadius: "50%", position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -352,7 +352,7 @@ function BreathingRing({ size = 220, onFinish }) {
     </div>
   );
 }
- 
+
 function BreathingPage({ uid, onSaved, goBack }) {
   const [saved, setSaved] = useState(false);
   const finish = async (elapsedSeconds) => {
@@ -375,7 +375,7 @@ function BreathingPage({ uid, onSaved, goBack }) {
   );
 }
 const backLinkStyle = { background: "none", border: "none", color: colors.inkSoft, fontFamily: font, fontSize: 13.5, cursor: "pointer", marginBottom: 18, display: "block" };
- 
+
 /* ---------------------- Ejercicio: lectura (niveles + temas) ---------------------- */
 const READING_TEXTS = [
   { id: "r1", level: "facil", topic: "deportes", title: "El partido", text: "El sábado fuimos al parque a jugar fútbol. Hacía sol y todos corrían felices detrás del balón." },
@@ -393,7 +393,7 @@ const READING_TEXTS = [
 ];
 const LEVELS = [["facil", "🟢 Fácil"], ["intermedio", "🟡 Intermedio"], ["avanzado", "🔴 Avanzado"]];
 const TOPICS = [["deportes", "Deportes"], ["videojuegos", "Videojuegos"], ["ciencia", "Ciencia"], ["peliculas", "Películas"]];
- 
+
 // Autoreporte, no diagnóstico: el usuario cuenta lo que le pasa, en sus
 // propias palabras. Speaksy nunca determina esto por sí solo.
 const FOCUS_AREAS = [
@@ -406,7 +406,7 @@ const FOCUS_AREAS = [
   { id: "resonancia", label: "Sonido nasal o de resonancia", desc: "la voz suena distinta de lo esperado en resonancia", recommend: ["articulation"] },
   { id: "otro", label: "Otra cosa / prefiero explorar libremente", desc: "", recommend: [] },
 ];
- 
+
 const SOUND_BANK = {
   r: { label: "R suave — como en 'pero'", syllables: "ra re ri ro ru", words: "pero cara toro aro", phrase: "El oso quiere comer cereal para el desayuno." },
   rr: { label: "RR fuerte — como en 'perro'", syllables: "rra rre rri rro rru", words: "perro carro tierra guerra", phrase: "El carro rojo corre rápido por la carretera." },
@@ -414,7 +414,7 @@ const SOUND_BANK = {
   l: { label: "L — como en 'luna'", syllables: "la le li lo lu", words: "luna sol pelota flor", phrase: "La luna ilumina el lago en la noche." },
   t: { label: "T — como en 'taza'", syllables: "ta te ti to tu", words: "taza pato tren gato", phrase: "El gato toma té en la taza pequeña." },
 };
- 
+
 /* =========================================================
    NIVELES ESTILO DUOLINGO — 4 áreas, cada una con su propia
    progresión desbloqueable. Todo lo de aquí para abajo hasta
@@ -422,7 +422,7 @@ const SOUND_BANK = {
    nada de lo que ya existía arriba (respiración libre, lectura
    libre, conversación libre, articulación libre siguen intactas).
 ========================================================= */
- 
+
 function starsFor(fraction) {
   if (fraction >= 0.9) return 3;
   if (fraction >= 0.5) return 2;
@@ -432,7 +432,7 @@ function starsFor(fraction) {
 function xpForStars(stars) {
   return 10 + stars * 15;
 }
- 
+
 const BREATHING_LEVELS = [
   { id: 1, title: "Respiración básica", desc: "Un ciclo completo (inhala-mantén-exhala), a tu ritmo.", cycles: 1 },
   { id: 2, title: "Respiración controlada", desc: "Tres ciclos seguidos, manteniendo el mismo ritmo.", cycles: 3 },
@@ -441,7 +441,7 @@ const BREATHING_LEVELS = [
   { id: 5, title: "Respiración + frases cortas", desc: "En cada exhalación, di una frase corta.", cycles: 3, words: ["Estoy tranquilo", "Voy a lograrlo", "Respiro y sigo"] },
   { id: 6, title: "Desafío de respiración y habla", desc: "Cinco ciclos completos, diciendo una frase distinta en cada uno.", cycles: 5, words: ["Estoy tranquilo", "Voy a lograrlo", "Respiro y sigo", "Puedo hacerlo", "Un paso a la vez"] },
 ];
- 
+
 const READING_LEVELS = [
   { id: 1, title: "Palabras individuales", desc: "Lee estas palabras, una por una, sin apuro.", parts: ["casa perro sol luna flor"] },
   { id: 2, title: "Frases cortas", desc: "Lee estas frases cortas en voz alta.", parts: ["El sol brilla.", "El perro corre.", "Hace calor hoy."] },
@@ -453,7 +453,7 @@ const READING_LEVELS = [
     "Al final de la tarde, cuando el sol empezaba a bajar, la bibliotecaria encendía las luces amarillas y ponía música suave de fondo.",
   ] },
 ];
- 
+
 const CONVERSATION_LEVELS = [
   { id: 1, title: "Saludos", desc: "Preguntas simples de saludo.", questions: ["Hola, ¿cómo estás?", "¿Qué tal tu día?"] },
   { id: 2, title: "Presentarse", desc: "Cuenta un poco sobre ti.", questions: ["¿Cómo te llamas?", "¿A qué te dedicas?"] },
@@ -463,7 +463,7 @@ const CONVERSATION_LEVELS = [
   { id: 6, title: "Conversación libre", desc: "Preguntas abiertas, responde como quieras.", questions: ["Si pudieras cambiar algo de tu rutina, ¿qué sería?", "Cuéntame una historia corta de algo que te pasó.", "¿Qué consejo le darías a alguien que empieza algo nuevo?"] },
   { id: 7, title: "Desafío de conversación", desc: "Una conversación más larga y variada.", questions: ["Cuéntame sobre tu semana con detalle.", "¿Qué opinas sobre trabajar en equipo?", "Describe un día perfecto para ti.", "¿Qué te gustaría estar haciendo en 5 años?"] },
 ];
- 
+
 const ARTICULATION_LEVELS = [
   { id: 1, title: "Vocales y sonidos básicos", desc: "Sonidos base, despacio y claro.", parts: ["a e i o u"] },
   { id: 2, title: "Sílabas", desc: "Sílabas simples.", parts: ["ma me mi mo mu"] },
@@ -480,19 +480,40 @@ const ARTICULATION_LEVELS = [
     "Erre con erre, cigarro. Erre con erre, barril.",
   ] },
 ];
- 
+
 const LEVEL_AREAS = {
-  breathing: { label: "🌬️ Respiración", levels: BREATHING_LEVELS },
-  reading: { label: "📖 Lectura", levels: READING_LEVELS },
-  conversation: { label: "💬 Conversación", levels: CONVERSATION_LEVELS },
-  articulation: { label: "🔊 Sonido y articulación", levels: ARTICULATION_LEVELS },
+
+  breathing: {
+    label: "Respiración",
+    image: "fotos/respira.png",
+    levels: BREATHING_LEVELS
+  },
+
+  reading: {
+    label: "Lectura",
+    image: "fotos/libro.png",
+    levels: READING_LEVELS
+  },
+
+  conversation: {
+    label: "Conversación",
+    image: "fotos/Conv.png",
+    levels: CONVERSATION_LEVELS
+  },
+
+  articulation: {
+    label: "Sonido y articulación",
+    image: "fotos/sonido.png",
+    levels: ARTICULATION_LEVELS
+  },
+
 };
- 
+
 async function loadLevelProgress(uid, area) {
   const doc = await db.collection("users").doc(uid).collection("levelProgress").doc(area).get();
   return (doc.exists && doc.data().completed) || {};
 }
- 
+
 async function saveLevelResult(uid, area, levelId, stars, durationSeconds) {
   const xp = xpForStars(stars);
   await db.collection("users").doc(uid).collection("levelProgress").doc(area).set({
@@ -503,19 +524,19 @@ async function saveLevelResult(uid, area, levelId, stars, durationSeconds) {
     extra: { level: levelId, stars, viaLevelPath: true },
   });
 }
- 
+
 // Reconocimiento de voz del navegador (Chrome/Edge lo soportan bien; Safari y
 // Firefox tienen soporte limitado o nulo). No hay backend ni API propia detrás:
 // es el motor de voz que trae el propio navegador.
 const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
- 
+
 function normalizeWord(w) {
   return (w || "")
     .toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^\p{L}\p{N}]/gu, "");
 }
- 
+
 /* ---------------------- Análisis de pronunciación real (beta) ----------------------
    Graba audio de verdad con el micrófono, lo convierte a WAV 16kHz mono, y lo
    manda a tu Cloud Function (functions/index.js), que a su vez llama a Azure
@@ -537,7 +558,7 @@ function encodeWAV(samples, sampleRate) {
   }
   return new Blob([view], { type: "audio/wav" });
 }
- 
+
 function PronunciationAnalysis({ referenceText, allowAnalysis }) {
   const [status, setStatus] = useState("idle"); // idle | recording | analyzing | done | error
   const [result, setResult] = useState(null);
@@ -546,7 +567,7 @@ function PronunciationAnalysis({ referenceText, allowAnalysis }) {
   const audioCtxRef = useRef(null);
   const processorRef = useRef(null);
   const samplesRef = useRef([]);
- 
+
   const start = async () => {
     setStatus("recording"); setResult(null); setError("");
     samplesRef.current = [];
@@ -566,7 +587,7 @@ function PronunciationAnalysis({ referenceText, allowAnalysis }) {
       setStatus("error");
     }
   };
- 
+
   const stop = async () => {
     setStatus("analyzing");
     try {
@@ -581,13 +602,13 @@ function PronunciationAnalysis({ referenceText, allowAnalysis }) {
       const ratio = sampleRate / targetRate;
       const resampled = new Float32Array(Math.floor(merged.length / ratio));
       for (let i = 0; i < resampled.length; i++) resampled[i] = merged[Math.floor(i * ratio)] || 0;
- 
+
       const wavBlob = encodeWAV(resampled, targetRate);
       const bytes = new Uint8Array(await wavBlob.arrayBuffer());
       let binary = "";
       for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
       const audioBase64 = btoa(binary);
- 
+
       const idToken = await auth.currentUser.getIdToken();
       const res = await fetch(FUNCTIONS_URL, {
         method: "POST",
@@ -603,7 +624,7 @@ function PronunciationAnalysis({ referenceText, allowAnalysis }) {
       setStatus("error");
     }
   };
- 
+
   if (!allowAnalysis) {
     return (
       <Card style={{ marginTop: 16 }}>
@@ -618,7 +639,7 @@ function PronunciationAnalysis({ referenceText, allowAnalysis }) {
       </Card>
     );
   }
- 
+
   if (!FUNCTIONS_URL) {
     return (
       <Card style={{ marginTop: 16 }}>
@@ -633,7 +654,7 @@ function PronunciationAnalysis({ referenceText, allowAnalysis }) {
       </Card>
     );
   }
- 
+
   return (
     <Card style={{ marginTop: 16 }}>
       <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 8 }}>
@@ -671,7 +692,7 @@ function PronunciationAnalysis({ referenceText, allowAnalysis }) {
     </Card>
   );
 }
- 
+
 function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
   const [level, setLevel] = useState("facil");
   const [topic, setTopic] = useState("deportes");
@@ -684,17 +705,17 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
   const recordingRef = useRef(false); // evita cerrar sobre un `status` viejo dentro de los callbacks
   const startTimeRef = useRef(0);
   const timestampsRef = useRef([]); // ms desde el inicio en que se reconoció cada palabra nueva
- 
+
   const options = READING_TEXTS.filter((t) => t.level === level && t.topic === topic);
   const words = selected ? selected.text.split(/\s+/) : [];
   const targetNormalized = words.map(normalizeWord);
- 
+
   useEffect(() => {
     if (status !== "recording") return;
     const t = setInterval(() => setSeconds((s) => s + 1), 1000);
     return () => clearInterval(t);
   }, [status]);
- 
+
   const errorMessages = {
     "not-allowed": "Bloqueaste el permiso del micrófono. Haz clic en el ícono de candado/micrófono en la barra de direcciones y permítelo, luego intenta de nuevo.",
     "no-speech": "No se detectó voz. Acércate al micrófono e intenta de nuevo.",
@@ -702,20 +723,20 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
     "network": "Hubo un problema de red con el reconocimiento de voz. Revisa tu conexión.",
     "service-not-allowed": "El navegador bloqueó el reconocimiento de voz en esta página.",
   };
- 
+
   const startRecording = () => {
     setStatus("recording"); setSeconds(0); setMatchedCount(0); setMicError("");
     recordingRef.current = true;
     startTimeRef.current = Date.now();
     timestampsRef.current = [];
- 
+
     if (!SpeechRecognitionAPI) return; // sin voz en vivo, solo el temporizador
- 
+
     const recognition = new SpeechRecognitionAPI();
     recognition.lang = "es-ES";
     recognition.continuous = true;
     recognition.interimResults = true;
- 
+
     recognition.onresult = (e) => {
       let transcript = "";
       for (let i = 0; i < e.results.length; i++) transcript += e.results[i][0].transcript + " ";
@@ -753,7 +774,7 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
       setStatus("idle");
     }
   };
- 
+
   // Métricas de fluidez calculadas de verdad a partir de los tiempos entre
   // palabras reconocidas — no es pronunciación, pero sí es una señal real.
   const computeFluency = () => {
@@ -766,7 +787,7 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
     const wordsPerMinute = minutes > 0 && matchedCount > 0 ? Math.round(matchedCount / minutes) : 0;
     return { pauseCount, wordsPerMinute };
   };
- 
+
   const finish = async () => {
     recordingRef.current = false;
     if (recognitionRef.current) {
@@ -783,13 +804,13 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
     });
     onSaved();
   };
- 
+
   if (!selected) {
     return (
       <div style={{ maxWidth: 680, margin: "0 auto", padding: "40px 24px 100px" }}>
         <button onClick={goBack} style={backLinkStyle}>← Volver</button>
         <h1 style={{ fontFamily: display, fontSize: 26, color: colors.ink, marginBottom: 20 }}>Lectura en voz alta</h1>
- 
+
         <Card style={{ marginBottom: 16 }}>
           <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 10 }}>Nivel</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -803,7 +824,7 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
             ))}
           </div>
         </Card>
- 
+
         <Card style={{ marginBottom: 16 }}>
           <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 10 }}>Tema</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -817,7 +838,7 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
             ))}
           </div>
         </Card>
- 
+
         <Card>
           <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 10 }}>Elige un texto</div>
           {options.map((t) => (
@@ -831,7 +852,7 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
       </div>
     );
   }
- 
+
   return (
     <div style={{ maxWidth: 620, margin: "0 auto", padding: "40px 24px 100px" }}>
       <button onClick={() => setSelected(null)} style={backLinkStyle}>← Elegir otro texto</button>
@@ -850,7 +871,7 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
           ))}
         </p>
       </Card>
- 
+
       {micError && (
         <div style={{ marginBottom: 16 }}>
           <Note tone="danger">{micError}</Note>
@@ -873,7 +894,7 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
           </Note>
         </div>
       )}
- 
+
       <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 20 }}>
         {status !== "recording" && status !== "done" ? (
           <PrimaryButton onClick={startRecording}>🎤 Comenzar grabación</PrimaryButton>
@@ -910,7 +931,7 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
     </div>
   );
 }
- 
+
 /* ---------------------- Modo conversación ---------------------- */
 const CONVERSATION_TOPICS = {
   cotidiano: {
@@ -941,7 +962,7 @@ const CONVERSATION_TOPICS = {
     ],
   },
 };
- 
+
 function ConversationPage({ uid, onSaved, goBack }) {
   const [topicKey, setTopicKey] = useState(null);
   const [qIndex, setQIndex] = useState(0);
@@ -952,16 +973,16 @@ function ConversationPage({ uid, onSaved, goBack }) {
   const [ratings, setRatings] = useState({ comodidad: 0, confianza: 0, participacion: 0 });
   const secondsRef = useRef(0);
   const recognitionRef = useRef(null);
- 
+
   useEffect(() => {
     if (!topicKey || phase !== "chat") return;
     const t = setInterval(() => { secondsRef.current += 1; }, 1000);
     return () => clearInterval(t);
   }, [topicKey, phase]);
- 
+
   const topicData = topicKey ? CONVERSATION_TOPICS[topicKey] : null;
   const question = topicData ? topicData.questions[qIndex] : null;
- 
+
   const startListening = () => {
     if (!SpeechRecognitionAPI) return;
     const recognition = new SpeechRecognitionAPI();
@@ -975,7 +996,7 @@ function ConversationPage({ uid, onSaved, goBack }) {
     setListening(true);
     recognition.start();
   };
- 
+
   const nextQuestion = () => {
     setAnswers((a) => [...a, { question, answer: draft }]);
     setDraft("");
@@ -985,7 +1006,7 @@ function ConversationPage({ uid, onSaved, goBack }) {
       setPhase("rating");
     }
   };
- 
+
   const submitRating = async () => {
     await saveSession(uid, {
       category: "conversation", durationSeconds: secondsRef.current,
@@ -997,7 +1018,7 @@ function ConversationPage({ uid, onSaved, goBack }) {
     setPhase("done");
     onSaved();
   };
- 
+
   if (!topicKey) {
     return (
       <div style={{ maxWidth: 620, margin: "0 auto", padding: "40px 24px 100px" }}>
@@ -1025,7 +1046,7 @@ function ConversationPage({ uid, onSaved, goBack }) {
       </div>
     );
   }
- 
+
   if (phase === "chat") {
     return (
       <div style={{ maxWidth: 560, margin: "0 auto", padding: "40px 24px 100px" }}>
@@ -1037,7 +1058,7 @@ function ConversationPage({ uid, onSaved, goBack }) {
           <div style={{ fontFamily: font, fontSize: 12, fontWeight: 700, color: colors.teal, marginBottom: 8 }}>SPEAKSY PREGUNTA</div>
           <p style={{ fontFamily: display, fontSize: 22, color: colors.ink, margin: 0 }}>{question}</p>
         </Card>
- 
+
         {SpeechRecognitionAPI ? (
           <div style={{ textAlign: "center", marginBottom: 16 }}>
             {!listening ? (
@@ -1051,21 +1072,21 @@ function ConversationPage({ uid, onSaved, goBack }) {
             placeholder="Escribe tu respuesta aquí…"
             style={{ width: "100%", minHeight: 90, padding: 12, borderRadius: 12, border: `1.5px solid ${colors.border}`, fontFamily: font, fontSize: 14, marginBottom: 16 }} />
         )}
- 
+
         {draft && (
           <Card style={{ marginBottom: 16, background: colors.mintSoft, border: "none" }}>
             <div style={{ fontFamily: font, fontSize: 12, fontWeight: 700, color: colors.teal, marginBottom: 6 }}>TU RESPUESTA</div>
             <p style={{ fontFamily: font, color: colors.ink, margin: 0 }}>{draft}</p>
           </Card>
         )}
- 
+
         <PrimaryButton disabled={!draft} onClick={nextQuestion} style={{ width: "100%", justifyContent: "center" }}>
           {qIndex + 1 < topicData.questions.length ? "Siguiente pregunta" : "Terminar conversación"}
         </PrimaryButton>
       </div>
     );
   }
- 
+
   if (phase === "rating") {
     const scale = [1, 2, 3, 4, 5];
     const Row = ({ label, field }) => (
@@ -1101,7 +1122,7 @@ function ConversationPage({ uid, onSaved, goBack }) {
       </div>
     );
   }
- 
+
   return (
     <div style={{ maxWidth: 520, margin: "0 auto", padding: "60px 24px 100px", textAlign: "center" }}>
       <div style={{ fontSize: 40, marginBottom: 12 }}>🎉</div>
@@ -1113,27 +1134,27 @@ function ConversationPage({ uid, onSaved, goBack }) {
     </div>
   );
 }
- 
+
 /* ---------------------- Dashboard / navegación principal ---------------------- */
 function categoryLabel(category) {
   return { breathing: "Respiración", reading: "Lectura en voz alta", conversation: "Conversación", articulation: "Sonidos y articulación" }[category] || category;
 }
- 
+
 /* ---------------------- Cuestionario inicial (autoreporte, no diagnóstico) ---------------------- */
 function OnboardingQuestionnaire({ uid, onDone }) {
   const [selected, setSelected] = useState([]);
   const [skipReason, setSkipReason] = useState(false);
   const [saving, setSaving] = useState(false);
- 
+
   const toggle = (id) => setSelected((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
- 
+
   const save = async (focusAreas) => {
     setSaving(true);
     await db.collection("users").doc(uid).set({ focusAreas }, { merge: true });
     setSaving(false);
     onDone();
   };
- 
+
   return (
     <div style={{ minHeight: "100vh", background: colors.canvas, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div style={{ maxWidth: 560, width: "100%" }}>
@@ -1171,17 +1192,17 @@ function OnboardingQuestionnaire({ uid, onDone }) {
     </div>
   );
 }
- 
+
 /* ---------------------- Sonidos y articulación ---------------------- */
 function ArticulationStage({ target, onDone, label }) {
   const [status, setStatus] = useState("idle");
   const [matchedCount, setMatchedCount] = useState(0);
   const recognitionRef = useRef(null);
   const recordingRef = useRef(false);
- 
+
   const words = target.split(/\s+/);
   const targetNormalized = words.map(normalizeWord);
- 
+
   const start = () => {
     setStatus("recording"); setMatchedCount(0);
     recordingRef.current = true;
@@ -1204,13 +1225,13 @@ function ArticulationStage({ target, onDone, label }) {
     recognitionRef.current = recognition;
     try { recognition.start(); } catch (e) {}
   };
- 
+
   const stop = () => {
     recordingRef.current = false;
     if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch (e) {} }
     setStatus("done");
   };
- 
+
   return (
     <Card style={{ marginBottom: 16 }}>
       <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginBottom: 8 }}>{label}</div>
@@ -1238,7 +1259,7 @@ function ArticulationStage({ target, onDone, label }) {
     </Card>
   );
 }
- 
+
 /* ---------------------- Runner: niveles de respiración ---------------------- */
 function BreathingLevelRunner({ level, onFinish, onExit }) {
   const phases = [
@@ -1256,7 +1277,7 @@ function BreathingLevelRunner({ level, onFinish, onExit }) {
   const recognitionRef = useRef(null);
   const hasWords = !!level.words;
   const currentWord = hasWords ? level.words[cyclesDone % level.words.length] : null;
- 
+
   const finishNow = (extraCycle) => {
     const totalCycles = cyclesDone + (extraCycle ? 1 : 0);
     const elapsed = Math.round((Date.now() - startTimeRef.current) / 1000) || 1;
@@ -1266,7 +1287,7 @@ function BreathingLevelRunner({ level, onFinish, onExit }) {
     if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch (e) {} }
     onFinish(fraction, elapsed);
   };
- 
+
   useEffect(() => {
     if (!running) return;
     if (hasWords && phases[phaseIdx].key === "exhale" && SpeechRecognitionAPI) {
@@ -1303,10 +1324,10 @@ function BreathingLevelRunner({ level, onFinish, onExit }) {
     return () => clearInterval(t);
     // eslint-disable-next-line
   }, [running, phaseIdx]);
- 
+
   const phase = phases[phaseIdx];
   const scale = running ? (phase.key === "exhale" ? 0.62 : 1) : 0.8;
- 
+
   return (
     <div style={{ textAlign: "center" }}>
       <p style={{ fontFamily: font, fontSize: 13.5, color: colors.inkSoft, marginBottom: 18 }}>
@@ -1338,13 +1359,13 @@ function BreathingLevelRunner({ level, onFinish, onExit }) {
     </div>
   );
 }
- 
+
 /* ---------------------- Runner: niveles de lectura y articulación (comparten motor) ---------------------- */
 function TextLevelRunner({ level, onFinish }) {
   const [partIdx, setPartIdx] = useState(0);
   const [totals, setTotals] = useState({ matched: 0, total: 0 });
   const startTimeRef = useRef(Date.now());
- 
+
   const handleDone = (matched, total) => {
     const newTotals = { matched: totals.matched + matched, total: totals.total + total };
     if (partIdx < level.parts.length - 1) {
@@ -1356,7 +1377,7 @@ function TextLevelRunner({ level, onFinish }) {
       onFinish(fraction, elapsed);
     }
   };
- 
+
   return (
     <ArticulationStage
       key={partIdx}
@@ -1366,7 +1387,7 @@ function TextLevelRunner({ level, onFinish }) {
     />
   );
 }
- 
+
 /* ---------------------- Runner: niveles de conversación ---------------------- */
 function ConversationLevelRunner({ level, onFinish }) {
   const [qIndex, setQIndex] = useState(0);
@@ -1374,7 +1395,7 @@ function ConversationLevelRunner({ level, onFinish }) {
   const [listening, setListening] = useState(false);
   const [draft, setDraft] = useState("");
   const startTimeRef = useRef(Date.now());
- 
+
   const startListening = () => {
     if (!SpeechRecognitionAPI) return;
     const recognition = new SpeechRecognitionAPI();
@@ -1386,7 +1407,7 @@ function ConversationLevelRunner({ level, onFinish }) {
     setListening(true);
     recognition.start();
   };
- 
+
   const next = () => {
     const answered = draft.trim().length > 0;
     const newCount = answeredCount + (answered ? 1 : 0);
@@ -1399,7 +1420,7 @@ function ConversationLevelRunner({ level, onFinish }) {
       onFinish(newCount / level.questions.length, elapsed);
     }
   };
- 
+
   return (
     <div>
       <p style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginBottom: 8 }}>
@@ -1429,12 +1450,12 @@ function ConversationLevelRunner({ level, onFinish }) {
     </div>
   );
 }
- 
+
 /* ---------------------- Camino de niveles (estilo Duolingo) ---------------------- */
 function LevelPath({ areaLabel, levels, progress, onSelect, goBack }) {
   const completedIds = Object.keys(progress).map(Number);
   const nextAvailable = completedIds.length === 0 ? 1 : Math.min(levels.length, Math.max(...completedIds) + 1);
- 
+
   return (
     <div style={{ maxWidth: 480, margin: "0 auto", padding: "36px 24px 100px" }}>
       <button onClick={goBack} style={backLinkStyle}>← Volver</button>
@@ -1483,17 +1504,17 @@ function LevelPath({ areaLabel, levels, progress, onSelect, goBack }) {
     </div>
   );
 }
- 
+
 /* ---------------------- Página de niveles por área ---------------------- */
 function LevelsPage({ uid, areaKey, goBack, onSaved }) {
   const area = LEVEL_AREAS[areaKey];
   const [progress, setProgress] = useState(null);
   const [activeLevel, setActiveLevel] = useState(null);
   const [result, setResult] = useState(null);
- 
+
   const refreshProgress = async () => setProgress(await loadLevelProgress(uid, areaKey));
   useEffect(() => { refreshProgress(); }, []);
- 
+
   const handleFinish = async (fraction, durationSeconds) => {
     const stars = starsFor(fraction);
     const xp = xpForStars(stars);
@@ -1503,9 +1524,9 @@ function LevelsPage({ uid, areaKey, goBack, onSaved }) {
     await refreshProgress();
     onSaved();
   };
- 
+
   if (progress === null) return <p style={{ padding: 40, textAlign: "center", fontFamily: font, color: colors.inkSoft }}>Cargando…</p>;
- 
+
   if (result) {
     return (
       <div style={{ maxWidth: 480, margin: "0 auto", padding: "60px 24px", textAlign: "center" }}>
@@ -1517,7 +1538,7 @@ function LevelsPage({ uid, areaKey, goBack, onSaved }) {
       </div>
     );
   }
- 
+
   if (activeLevel) {
     return (
       <div style={{ maxWidth: 560, margin: "0 auto", padding: "36px 24px 100px" }}>
@@ -1530,19 +1551,19 @@ function LevelsPage({ uid, areaKey, goBack, onSaved }) {
       </div>
     );
   }
- 
+
   return <LevelPath areaLabel={area.label} levels={area.levels} progress={progress} onSelect={setActiveLevel} goBack={goBack} />;
 }
- 
+
 /* ---------------------- Selector de las 4 áreas con niveles ---------------------- */
 function LevelAreasHome({ uid, navigate }) {
   const [summaries, setSummaries] = useState(null);
- 
+
   useEffect(() => {
     Promise.all(Object.keys(LEVEL_AREAS).map((k) => loadLevelProgress(uid, k).then((p) => [k, p])))
       .then((pairs) => setSummaries(Object.fromEntries(pairs)));
   }, []);
- 
+
   return (
     <div style={{ maxWidth: 640, margin: "0 auto", padding: "36px 24px 100px" }}>
       <h1 style={{ fontFamily: display, fontSize: 28, color: colors.ink, marginBottom: 6 }}>Niveles</h1>
@@ -1553,30 +1574,67 @@ function LevelAreasHome({ uid, navigate }) {
         {Object.entries(LEVEL_AREAS).map(([key, area]) => {
           const done = summaries ? Object.keys(summaries[key] || {}).length : 0;
           return (
-            <button key={key} onClick={() => navigate("levels-" + key)} style={{
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-              padding: "18px 20px", borderRadius: 16, border: `1.5px solid ${colors.border}`,
-              background: "#fff", cursor: "pointer", fontFamily: font, textAlign: "left",
-            }}>
-              <span style={{ fontWeight: 700, fontSize: 15.5, color: colors.ink }}>{area.label}</span>
-              <span style={{ fontFamily: mono, fontSize: 12.5, color: colors.inkSoft }}>
-                {summaries ? `${done}/${area.levels.length}` : "…"}
-              </span>
-            </button>
+            <button
+  key={key}
+  onClick={() => navigate("levels-" + key)}
+  style={{
+    display: "flex",
+    alignItems: "center",
+    gap: 14,
+    width: "100%",
+    padding: "18px 20px",
+    borderRadius: 16,
+    border: `1.5px solid ${colors.border}`,
+    background: "#fff",
+    cursor: "pointer",
+    fontFamily: font,
+    textAlign: "left",
+  }}
+>
+  <img
+    src={area.image}
+    alt={area.label}
+    style={{
+      width: 45,
+      height: 45,
+      objectFit: "contain",
+      flexShrink: 0,
+    }}
+  />
+
+  <div style={{ flex: 1 }}>
+    <div style={{
+      fontWeight: 700,
+      fontSize: 15.5,
+      color: colors.ink
+    }}>
+      {area.label}
+    </div>
+
+    <div style={{
+      fontFamily: mono,
+      fontSize: 12.5,
+      color: colors.inkSoft,
+      marginTop: 4
+    }}>
+      {summaries ? `${done}/${area.levels.length} niveles` : "…"}
+    </div>
+  </div>
+</button>
           );
         })}
       </div>
     </div>
   );
 }
- 
+
 function ArticulationPage({ uid, onSaved, goBack }) {
   const [sound, setSound] = useState(null);
   const [stageIdx, setStageIdx] = useState(0);
   const [totals, setTotals] = useState({ matched: 0, total: 0 });
   const stages = ["syllables", "words", "phrase"];
   const stageLabels = { syllables: "Sílabas", words: "Palabras", phrase: "Frase" };
- 
+
   const finishStage = (matched, total) => {
     setTotals((t) => ({ matched: t.matched + matched, total: t.total + total }));
     if (stageIdx < stages.length - 1) {
@@ -1589,7 +1647,7 @@ function ArticulationPage({ uid, onSaved, goBack }) {
       setStageIdx(stages.length); // pantalla final
     }
   };
- 
+
   if (!sound) {
     return (
       <div style={{ maxWidth: 620, margin: "0 auto", padding: "40px 24px 100px" }}>
@@ -1612,15 +1670,15 @@ function ArticulationPage({ uid, onSaved, goBack }) {
       </div>
     );
   }
- 
+
   const data = SOUND_BANK[sound];
   const targets = { syllables: data.syllables, words: data.words, phrase: data.phrase };
- 
+
   return (
     <div style={{ maxWidth: 620, margin: "0 auto", padding: "40px 24px 100px" }}>
       <button onClick={() => setSound(null)} style={backLinkStyle}>← Elegir otro sonido</button>
       <h1 style={{ fontFamily: display, fontSize: 24, color: colors.ink, marginBottom: 16 }}>{data.label}</h1>
- 
+
       {stageIdx < stages.length ? (
         <ArticulationStage
           key={stages[stageIdx]}
@@ -1640,7 +1698,7 @@ function ArticulationPage({ uid, onSaved, goBack }) {
     </div>
   );
 }
- 
+
 function recommendationsFor(focusAreas) {
   if (!focusAreas || focusAreas.length === 0 || focusAreas.includes("prefiero_no_decir")) return [];
   const chosen = FOCUS_AREAS.filter((a) => focusAreas.includes(a.id));
@@ -1653,58 +1711,151 @@ function recommendationsFor(focusAreas) {
   };
   return [...pages].map((p) => PAGE_INFO[p]).filter(Boolean);
 }
- 
-function Dashboard({ user, stats, refresh, navigate, focusAreas, xp }) {
-  const recs = recommendationsFor(focusAreas);
-  const recent = stats.sessions.slice(0, 5);
-  const level = levelFor(xp || 0);
+
+/* ---------------------- Catálogo de cursos (reutilizable) ---------------------- */
+const COURSES = {
+  breathing: { image: "fotos/respira.png", title: "Respiración", desc: "Aprende técnicas de respiración y control.", practicePage: "breathing" },
+  reading: { image: "fotos/libro.png", title: "Lectura", desc: "Practica lectura y fluidez a tu ritmo.", practicePage: "reading" },
+  conversation: { image: "fotos/Conv.png", title: "Conversación", desc: "Practica situaciones de conversación con calma.", practicePage: "conversation" },
+  articulation: { image: "fotos/sonido.png", title: "Sonido y articulación", desc: "Practica sonidos, palabras y trabalenguas.", practicePage: "articulation" },
+};
+
+function courseProgressPercent(progress, areaKey) {
+  const total = LEVEL_AREAS[areaKey].levels.length;
+  const done = Object.keys(progress[areaKey] || {}).length;
+  return { done, total, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
+}
+
+function CourseCard({ courseKey, onSelect, progressPct }) {
+  const c = COURSES[courseKey];
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: "36px 24px 90px" }}>
-      <h1 style={{ fontFamily: display, fontSize: 28, color: colors.ink, marginBottom: 2 }}>Hola, {user.name || user.email}.</h1>
-      <p style={{ fontFamily: font, color: colors.inkSoft, marginBottom: 26 }}>¿Lista para practicar?</p>
- 
-      <Card style={{ marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+    <Card style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <img src={c.image} alt={c.title} style={{ width: 40, height: 40, objectFit: "contain" }} />
+      <div style={{ fontFamily: font, fontWeight: 700, fontSize: 16, color: colors.ink }}>{c.title}</div>
+      <div style={{ fontFamily: font, fontSize: 13, color: colors.inkSoft, minHeight: 34 }}>{c.desc}</div>
+      {typeof progressPct === "number" && (
         <div>
-          <Pill>Nivel {level.number} · {level.title}</Pill>
-          <div style={{ fontFamily: mono, fontSize: 13, color: colors.inkSoft, marginTop: 8 }}>
-            {xp || 0} XP{level.next ? ` · faltan ${level.next.min - (xp || 0)} para "${level.next.title}"` : " · nivel máximo"}
+          <div style={{ height: 8, borderRadius: 999, background: colors.mintSoft, overflow: "hidden", marginBottom: 6 }}>
+            <div style={{ height: "100%", width: `${progressPct}%`, background: colors.teal, borderRadius: 999, transition: "width .4s ease" }} />
           </div>
+          <div style={{ fontFamily: mono, fontSize: 11.5, color: colors.inkSoft }}>{progressPct}% completado</div>
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          <GhostButton onClick={() => navigate("levels")}>Ver niveles</GhostButton>
-          <GhostButton onClick={() => navigate("leaderboard")}>Ver ranking</GhostButton>
+      )}
+      <PrimaryButton onClick={() => onSelect(courseKey)} style={{ marginTop: 6, justifyContent: "center" }}>
+        {typeof progressPct === "number" && progressPct > 0 ? "Continuar" : "Elegir curso"}
+      </PrimaryButton>
+    </Card>
+  );
+}
+
+function CourseCatalog({ courseKeys, onSelect, progress }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
+      {courseKeys.map((k) => (
+        <CourseCard key={k} courseKey={k} onSelect={onSelect}
+          progressPct={progress ? courseProgressPercent(progress, k).pct : undefined} />
+      ))}
+    </div>
+  );
+}
+
+/* ---------------------- Detalle de un curso: Practicar vs Niveles ---------------------- */
+function CourseDetailPage({ areaKey, uid, navigate, goBack }) {
+  const c = COURSES[areaKey];
+  const [progress, setProgress] = useState(null);
+
+  useEffect(() => { loadLevelProgress(uid, areaKey).then(setProgress); }, [areaKey]);
+
+  const summary = progress ? courseProgressPercent({ [areaKey]: progress }, areaKey) : null;
+
+  return (
+    <div style={{ maxWidth: 560, margin: "0 auto", padding: "40px 24px 100px", textAlign: "center" }}>
+      <button onClick={goBack} style={{ ...backLinkStyle, textAlign: "left" }}>← Volver a cursos</button>
+      <div style={{ fontSize: 44, marginBottom: 8 }}>{c.icon}</div>
+      <h1 style={{ fontFamily: display, fontSize: 28, color: colors.ink, marginBottom: 8 }}>{c.title}</h1>
+      <p style={{ fontFamily: font, color: colors.inkSoft, marginBottom: 8, maxWidth: 400, marginLeft: "auto", marginRight: "auto" }}>{c.desc}</p>
+      {summary && (
+        <p style={{ fontFamily: mono, fontSize: 12.5, color: colors.teal, marginBottom: 30 }}>
+          {summary.done}/{summary.total} niveles completados
+        </p>
+      )}
+      <div style={{ display: "grid", gap: 14, marginTop: 20 }}>
+        <Card style={{ textAlign: "left", display: "flex", alignItems: "center", gap: 16 }}>
+          <div style={{ fontSize: 26 }}>🧘</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: font, fontWeight: 700, fontSize: 15, color: colors.ink }}>Practicar</div>
+            <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft }}>Práctica libre, sin desbloqueos ni secuencia. Repite cuando quieras.</div>
+          </div>
+          <PrimaryButton onClick={() => navigate(c.practicePage)}>Practicar</PrimaryButton>
+        </Card>
+        <Card style={{ textAlign: "left", display: "flex", alignItems: "center", gap: 16 }}>
+          <div style={{ fontSize: 26 }}>🏆</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: font, fontWeight: 700, fontSize: 15, color: colors.ink }}>Niveles</div>
+            <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft }}>Progresión estructurada, con estrellas y XP. Completa un nivel para desbloquear el siguiente.</div>
+          </div>
+          <PrimaryButton onClick={() => navigate("levels-" + areaKey)}>Niveles</PrimaryButton>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------- Mis cursos ---------------------- */
+function MyCoursesPage({ uid, navigate }) {
+  const [progress, setProgress] = useState(null);
+
+  useEffect(() => {
+    Promise.all(Object.keys(COURSES).map((k) => loadLevelProgress(uid, k).then((p) => [k, p])))
+      .then((pairs) => setProgress(Object.fromEntries(pairs)));
+  }, []);
+
+  if (!progress) return <p style={{ padding: 40, textAlign: "center", fontFamily: font, color: colors.inkSoft }}>Cargando…</p>;
+
+  const started = Object.keys(COURSES).filter((k) => Object.keys(progress[k] || {}).length > 0);
+  const notStarted = Object.keys(COURSES).filter((k) => !started.includes(k));
+
+  return (
+    <div style={{ maxWidth: 900, margin: "0 auto", padding: "36px 24px 100px" }}>
+      <h1 style={{ fontFamily: display, fontSize: 28, color: colors.ink, marginBottom: 24 }}>Mis cursos</h1>
+      {started.length === 0 ? (
+        <Note>Todavía no empezaste ningún curso. Elige uno abajo para comenzar.</Note>
+      ) : (
+        <div style={{ marginBottom: 28 }}>
+          <CourseCatalog courseKeys={started} onSelect={(k) => navigate("curso-" + k)} progress={progress} />
+        </div>
+      )}
+      {notStarted.length > 0 && (
+        <div>
+          <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 12 }}>Explorar otros cursos</div>
+          <CourseCatalog courseKeys={notStarted} onSelect={(k) => navigate("curso-" + k)} progress={progress} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------- Mi progreso (estadísticas generales) ---------------------- */
+function MyProgressPage({ stats, xp }) {
+  const level = levelFor(xp || 0);
+  const recent = stats.sessions.slice(0, 8);
+  return (
+    <div style={{ maxWidth: 800, margin: "0 auto", padding: "36px 24px 100px" }}>
+      <h1 style={{ fontFamily: display, fontSize: 28, color: colors.ink, marginBottom: 24 }}>Mi progreso</h1>
+
+      <Card style={{ marginBottom: 20 }}>
+        <Pill>Nivel {level.number} · {level.title}</Pill>
+        <div style={{ fontFamily: mono, fontSize: 13, color: colors.inkSoft, marginTop: 8 }}>
+          {xp || 0} XP{level.next ? ` · faltan ${level.next.min - (xp || 0)} para "${level.next.title}"` : " · nivel máximo"}
         </div>
       </Card>
- 
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 24 }}>
         <StatCard label="Sesiones realizadas" value={stats.totalSessions} />
         <StatCard label="Minutos practicados" value={stats.totalMinutes} />
         <StatCard label="Días seguidos" value={`🔥 ${stats.streak}`} />
       </div>
- 
-      <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
-        <PrimaryButton onClick={() => navigate("breathing")}>Practicar respiración</PrimaryButton>
-        <GhostButton onClick={() => navigate("reading")}>Practicar lectura</GhostButton>
-        <GhostButton onClick={() => navigate("conversation")}>Modo conversación</GhostButton>
-        <GhostButton onClick={() => navigate("articulation")}>Sonidos y articulación</GhostButton>
-      </div>
- 
-      {recs.length > 0 && (
-        <Card style={{ marginBottom: 24 }}>
-          <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 12 }}>Recomendado para ti</div>
-          <div style={{ display: "grid", gridTemplateColumns: `repeat(${recs.length}, 1fr)`, gap: 12 }}>
-            {recs.map((r) => (
-              <div key={r.page} onClick={() => navigate(r.page)} style={{
-                border: `1.5px solid ${colors.border}`, borderRadius: 14, padding: 14, cursor: "pointer",
-              }}>
-                <div style={{ fontFamily: font, fontWeight: 600, fontSize: 14, color: colors.ink, marginBottom: 4 }}>{r.label}</div>
-                <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft }}>{r.blurb}</div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
- 
+
       <Card>
         <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 12 }}>Actividad reciente</div>
         {recent.length === 0 && <p style={{ fontFamily: font, fontSize: 13.5, color: colors.inkSoft }}>Todavía no hay sesiones. ¡Empieza con una!</p>}
@@ -1718,18 +1869,84 @@ function Dashboard({ user, stats, refresh, navigate, focusAreas, xp }) {
     </div>
   );
 }
- 
+
+function Dashboard({ user, uid, stats, refresh, navigate, focusAreas, xp }) {
+  const recs = recommendationsFor(focusAreas);
+  const level = levelFor(xp || 0);
+  const [progress, setProgress] = useState(null);
+
+  useEffect(() => {
+    Promise.all(Object.keys(COURSES).map((k) => loadLevelProgress(uid, k).then((p) => [k, p])))
+      .then((pairs) => setProgress(Object.fromEntries(pairs)));
+  }, []);
+
+  const enrolled = progress ? Object.keys(COURSES).filter((k) => Object.keys(progress[k] || {}).length > 0) : [];
+  const available = progress ? Object.keys(COURSES).filter((k) => !enrolled.includes(k)) : [];
+
+  return (
+    <div style={{ maxWidth: 900, margin: "0 auto", padding: "36px 24px 90px" }}>
+      <h1 style={{ fontFamily: display, fontSize: 28, color: colors.ink, marginBottom: 2 }}>Hola, {user.name || user.email}.</h1>
+      <p style={{ fontFamily: font, color: colors.inkSoft, marginBottom: 22 }}>Elige un curso para comenzar.</p>
+
+      <Card style={{ marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <Pill>Nivel {level.number} · {level.title}</Pill>
+          <div style={{ fontFamily: mono, fontSize: 13, color: colors.inkSoft, marginTop: 8 }}>{xp || 0} XP</div>
+        </div>
+        <GhostButton onClick={() => navigate("progress")}>Ver mi progreso</GhostButton>
+      </Card>
+
+      {progress === null ? (
+        <p style={{ fontFamily: font, color: colors.inkSoft }}>Cargando tus cursos…</p>
+      ) : (
+        <>
+          {enrolled.length > 0 && (
+            <div style={{ marginBottom: 28 }}>
+              <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 12 }}>Continúa donde quedaste</div>
+              <CourseCatalog courseKeys={enrolled} onSelect={(k) => navigate("curso-" + k)} progress={progress} />
+            </div>
+          )}
+          {available.length > 0 && (
+            <div>
+              <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 12 }}>
+                {enrolled.length > 0 ? "Cursos disponibles" : "Elige un curso para comenzar"}
+              </div>
+              <CourseCatalog courseKeys={available} onSelect={(k) => navigate("curso-" + k)} />
+            </div>
+          )}
+        </>
+      )}
+
+      {recs.length > 0 && (
+        <Card style={{ marginTop: 24 }}>
+          <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 12 }}>Recomendado para ti</div>
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${recs.length}, 1fr)`, gap: 12 }}>
+            {recs.map((r) => (
+              <div key={r.page} onClick={() => navigate(r.page)} style={{
+                border: `1.5px solid ${colors.border}`, borderRadius: 14, padding: 14, cursor: "pointer",
+              }}>
+                <div style={{ fontFamily: font, fontWeight: 600, fontSize: 14, color: colors.ink, marginBottom: 4 }}>{r.label}</div>
+                <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft }}>{r.blurb}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 /* ---------------------- Ranking (opcional, por XP de constancia) ---------------------- */
 function LeaderboardPage({ uid }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState("");
- 
+
   useEffect(() => {
     db.collection("leaderboard").orderBy("xp", "desc").limit(20).get()
       .then((snap) => setRows(snap.docs.map((d) => ({ id: d.id, ...d.data() }))))
       .catch((e) => setError(e.message));
   }, []);
- 
+
   return (
     <div style={{ maxWidth: 640, margin: "0 auto", padding: "36px 24px 100px" }}>
       <h1 style={{ fontFamily: display, fontSize: 28, color: colors.ink, marginBottom: 6 }}>Ranking de constancia</h1>
@@ -1765,26 +1982,26 @@ function LeaderboardPage({ uid }) {
     </div>
   );
 }
- 
+
 function AchievementsPage({ stats }) {
   return (
     <div style={{ maxWidth: 800, margin: "0 auto", padding: "36px 24px 90px" }}>
       <h1 style={{ fontFamily: display, fontSize: 28, color: colors.ink, marginBottom: 24 }}>Logros</h1>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
         {ACHIEVEMENTS.map((a) => {
-  const unlocked = stats.unlockedIds.has(a.id);
-  return (
-    <Card key={a.id} style={{ textAlign: "center", opacity: unlocked ? 1 : 0.4 }}>
-      <img src={a.image} alt={a.name} style={{ width: 80, height: 80, objectFit: "cover", borderRadius: 12, marginBottom: 10 }} />
-      <div style={{ fontFamily: font, fontWeight: 600, fontSize: 13.5, color: colors.ink }}>{a.name}</div>
-    </Card>
-  );
-})}
+          const unlocked = stats.unlockedIds.has(a.id);
+          return (
+            <Card key={a.id} style={{ textAlign: "center", opacity: unlocked ? 1 : 0.4 }}>
+              <img src={a.image} alt={a.name} style={{ width: 80, height: 80, objectFit: "cover", borderRadius: 12, marginBottom: 10 }} />
+              <div style={{ fontFamily: font, fontWeight: 600, fontSize: 13.5, color: colors.ink }}>{a.name}</div>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );
 }
- 
+
 /* ---------------------- App con sesión iniciada ---------------------- */
 /* ---------------------- Perfil y configuración ---------------------- */
 function ProfilePage({ uid, profile, onSaved }) {
@@ -1795,7 +2012,7 @@ function ProfilePage({ uid, profile, onSaved }) {
   const [allowAnalysis, setAllowAnalysis] = useState(!!profile.allowPronunciationAnalysis);
   const [showOnLeaderboard, setShowOnLeaderboard] = useState(!!profile.showOnLeaderboard);
   const [saving, setSaving] = useState(false);
- 
+
   const saveName = async () => {
     setSaving(true);
     await db.collection("users").doc(uid).set({ name }, { merge: true });
@@ -1804,9 +2021,9 @@ function ProfilePage({ uid, profile, onSaved }) {
     onSaved();
     setTimeout(() => setNameSaved(false), 2000);
   };
- 
+
   const toggleFocus = (id) => setFocusSelection((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
- 
+
   const saveFocus = async () => {
     setSaving(true);
     await db.collection("users").doc(uid).set({ focusAreas: focusSelection }, { merge: true });
@@ -1814,14 +2031,14 @@ function ProfilePage({ uid, profile, onSaved }) {
     setEditingFocus(false);
     onSaved();
   };
- 
+
   const toggleAnalysisPermission = async () => {
     const next = !allowAnalysis;
     setAllowAnalysis(next);
     await db.collection("users").doc(uid).set({ allowPronunciationAnalysis: next }, { merge: true });
     onSaved();
   };
- 
+
   const toggleLeaderboard = async () => {
     const next = !showOnLeaderboard;
     setShowOnLeaderboard(next);
@@ -1837,15 +2054,15 @@ function ProfilePage({ uid, profile, onSaved }) {
     }
     onSaved();
   };
- 
+
   const currentFocusLabels = (profile.focusAreas || [])
     .map((id) => FOCUS_AREAS.find((a) => a.id === id))
     .filter(Boolean);
- 
+
   return (
     <div style={{ maxWidth: 640, margin: "0 auto", padding: "36px 24px 100px" }}>
       <h1 style={{ fontFamily: display, fontSize: 28, color: colors.ink, marginBottom: 24 }}>Perfil y configuración</h1>
- 
+
       <Card style={{ marginBottom: 18 }}>
         <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 4 }}>Cómo quieres que te llamemos</div>
         <p style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginBottom: 14 }}>
@@ -1858,7 +2075,7 @@ function ProfilePage({ uid, profile, onSaved }) {
         </div>
         {nameSaved && <div style={{ marginTop: 10 }}><Note>Listo, así te llamaremos de ahora en adelante.</Note></div>}
       </Card>
- 
+
       <Card style={{ marginBottom: 18 }}>
         <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 4 }}>Tu enfoque de práctica</div>
         <p style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginBottom: 14 }}>
@@ -1898,7 +2115,7 @@ function ProfilePage({ uid, profile, onSaved }) {
           </div>
         )}
       </Card>
- 
+
       <Card>
         <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 4 }}>Privacidad y permisos</div>
         <p style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginBottom: 16 }}>
@@ -1920,9 +2137,9 @@ function ProfilePage({ uid, profile, onSaved }) {
             </div>
           </div>
         </label>
- 
+
         <div style={{ borderTop: `1px solid ${colors.border}`, margin: "16px 0" }} />
- 
+
         <label style={{ display: "flex", gap: 12, alignItems: "flex-start", cursor: "pointer" }}>
           <input type="checkbox" checked={showOnLeaderboard} onChange={toggleLeaderboard} style={{ marginTop: 3 }} />
           <div>
@@ -1941,34 +2158,97 @@ function ProfilePage({ uid, profile, onSaved }) {
     </div>
   );
 }
- 
+
 function TopBar({ page, navigate, onLogout }) {
-  const items = [["dashboard", "Inicio"], ["levels", "Niveles"], ["leaderboard", "Ranking"], ["achievements", "Logros"], ["profile", "Perfil"]];
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef(null);
+  const items = [
+  ["dashboard", "Inicio", "fotos/Inicio.png"],
+  ["mis-cursos", "Mis cursos", "fotos/Mis_cursos.png"],
+  ["levels", "Niveles", "fotos/Niveles.png"],
+  ["leaderboard", "Ranking", "fotos/Ranking.png"],
+  ["achievements", "Logros", "fotos/Logros.png"],
+  ["progress", "Mi progreso", "fotos/Mi progreso.png"],
+  ["profile", "Configuración", "fotos/Confi.png"],
+];
+
+  useEffect(() => {
+    if (!open) return;
+    const onClickOutside = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [open]);
+
+  const go = (id) => { navigate(id); setOpen(false); };
+
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 24px", borderBottom: `1px solid ${colors.border}`, background: colors.card, fontFamily: font }}>
-      <div onClick={() => navigate("dashboard")} style={{ fontFamily: display, fontWeight: 600, fontSize: 20, color: colors.ink, cursor: "pointer" }}>Speaksy</div>
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        {items.map(([id, label]) => {
-          const active = page === id || (id === "levels" && page.startsWith("levels"));
-          return (
-            <button key={id} onClick={() => navigate(id)} style={{
-              background: active ? colors.mintSoft : "transparent", color: active ? colors.teal : colors.inkSoft,
-              border: "none", borderRadius: 999, padding: "8px 14px", fontFamily: font, fontWeight: 600, fontSize: 13.5, cursor: "pointer",
-            }}>{label}</button>
-          );
-        })}
-        <button onClick={onLogout} style={{ background: "none", border: "none", color: colors.inkSoft, fontFamily: font, fontSize: 13, cursor: "pointer", marginLeft: 6 }}>Salir</button>
+    <div style={{ position: "sticky", top: 0, zIndex: 30, borderBottom: `1px solid ${colors.border}`, background: colors.card }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 24px", fontFamily: font }}>
+        <div onClick={() => go("dashboard")} style={{ fontFamily: display, fontWeight: 600, fontSize: 20, color: colors.ink, cursor: "pointer" }}>Speaksy</div>
+        <div ref={menuRef} style={{ position: "relative" }}>
+          <button onClick={() => setOpen((o) => !o)} style={{
+            display: "flex", alignItems: "center", gap: 8, background: open ? colors.mintSoft : "transparent",
+            border: `1.5px solid ${colors.border}`, borderRadius: 999, padding: "8px 16px",
+            fontFamily: font, fontWeight: 600, fontSize: 13.5, color: colors.ink, cursor: "pointer",
+          }}>
+            ☰ Menú
+          </button>
+          {open && (
+            <div style={{
+              position: "absolute", right: 0, top: "calc(100% + 8px)", background: "#fff",
+              border: `1px solid ${colors.border}`, borderRadius: 14, boxShadow: "0 8px 24px rgba(22,48,43,.12)",
+              minWidth: 210, overflow: "hidden", zIndex: 40,
+            }}>
+             {items.map(([id, label, image]) => (
+  <button
+    key={id}
+    onClick={() => go(id)}
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      width: "100%",
+      textAlign: "left",
+      padding: "12px 16px",
+      background: "transparent",
+      border: "none",
+      fontFamily: font,
+      fontSize: 13.5,
+      color: colors.ink,
+      cursor: "pointer",
+    }}
+  >
+    <img
+      src={image}
+      alt={label}
+      style={{
+        width: 24,
+        height: 24,
+        objectFit: "contain",
+      }}
+    />
+    <span>{label}</span>
+  </button>
+))}
+              <div style={{ borderTop: `1px solid ${colors.border}` }} />
+              <button onClick={onLogout} style={{
+                display: "block", width: "100%", textAlign: "left", padding: "12px 16px",
+                background: "transparent", color: colors.inkSoft, border: "none", fontFamily: font, fontSize: 13.5, cursor: "pointer",
+              }}>Salir</button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
- 
+
 function LoggedInApp({ authUser }) {
   const [page, setPage] = useState("dashboard");
   const [profile, setProfile] = useState(null);
   const [stats, setStats] = useState({ sessions: [], totalSessions: 0, totalMinutes: 0, streak: 0, unlockedIds: new Set() });
   const [loading, setLoading] = useState(true);
- 
+
   const refresh = async () => {
     const doc = await db.collection("users").doc(authUser.uid).get();
     setProfile(doc.data() || { email: authUser.email });
@@ -1976,55 +2256,61 @@ function LoggedInApp({ authUser }) {
     setStats(s);
     setLoading(false);
   };
- 
+
   useEffect(() => { refresh(); }, []);
- 
+
   if (loading) return <div style={{ padding: 60, textAlign: "center", fontFamily: font, color: colors.inkSoft }}>Cargando tu progreso…</div>;
- 
+
   if (!profile.focusAreas) {
     return <OnboardingQuestionnaire uid={authUser.uid} onDone={refresh} />;
   }
- 
+
   const user = { name: profile.name, email: profile.email };
- 
+
   return (
     <div style={{ background: colors.canvas, minHeight: "100vh" }}>
       <TopBar page={page} navigate={setPage} onLogout={() => auth.signOut()} />
-      {page === "dashboard" && <Dashboard user={user} stats={stats} refresh={refresh} navigate={setPage} focusAreas={profile.focusAreas} xp={profile.xp || 0} />}
-      {page === "breathing" && <BreathingPage uid={authUser.uid} onSaved={refresh} goBack={() => setPage("dashboard")} />}
-      {page === "reading" && <ReadingPage uid={authUser.uid} onSaved={refresh} goBack={() => setPage("dashboard")} allowAnalysis={!!profile.allowPronunciationAnalysis} />}
-      {page === "conversation" && <ConversationPage uid={authUser.uid} onSaved={refresh} goBack={() => setPage("dashboard")} />}
-      {page === "articulation" && <ArticulationPage uid={authUser.uid} onSaved={refresh} goBack={() => setPage("dashboard")} />}
+      {page === "dashboard" && <Dashboard user={user} uid={authUser.uid} stats={stats} refresh={refresh} navigate={setPage} focusAreas={profile.focusAreas} xp={profile.xp || 0} />}
+      {page === "mis-cursos" && <MyCoursesPage uid={authUser.uid} navigate={setPage} />}
+      {page === "curso-breathing" && <CourseDetailPage areaKey="breathing" uid={authUser.uid} navigate={setPage} goBack={() => setPage("mis-cursos")} />}
+      {page === "curso-reading" && <CourseDetailPage areaKey="reading" uid={authUser.uid} navigate={setPage} goBack={() => setPage("mis-cursos")} />}
+      {page === "curso-conversation" && <CourseDetailPage areaKey="conversation" uid={authUser.uid} navigate={setPage} goBack={() => setPage("mis-cursos")} />}
+      {page === "curso-articulation" && <CourseDetailPage areaKey="articulation" uid={authUser.uid} navigate={setPage} goBack={() => setPage("mis-cursos")} />}
+      {page === "breathing" && <BreathingPage uid={authUser.uid} onSaved={refresh} goBack={() => setPage("curso-breathing")} />}
+      {page === "reading" && <ReadingPage uid={authUser.uid} onSaved={refresh} goBack={() => setPage("curso-reading")} allowAnalysis={!!profile.allowPronunciationAnalysis} />}
+      {page === "conversation" && <ConversationPage uid={authUser.uid} onSaved={refresh} goBack={() => setPage("curso-conversation")} />}
+      {page === "articulation" && <ArticulationPage uid={authUser.uid} onSaved={refresh} goBack={() => setPage("curso-articulation")} />}
       {page === "achievements" && <AchievementsPage stats={stats} />}
       {page === "leaderboard" && <LeaderboardPage uid={authUser.uid} />}
+      {page === "progress" && <MyProgressPage stats={stats} xp={profile.xp || 0} />}
       {page === "levels" && <LevelAreasHome uid={authUser.uid} navigate={setPage} />}
-      {page === "levels-breathing" && <LevelsPage uid={authUser.uid} areaKey="breathing" goBack={() => setPage("levels")} onSaved={refresh} />}
-      {page === "levels-reading" && <LevelsPage uid={authUser.uid} areaKey="reading" goBack={() => setPage("levels")} onSaved={refresh} />}
-      {page === "levels-conversation" && <LevelsPage uid={authUser.uid} areaKey="conversation" goBack={() => setPage("levels")} onSaved={refresh} />}
-      {page === "levels-articulation" && <LevelsPage uid={authUser.uid} areaKey="articulation" goBack={() => setPage("levels")} onSaved={refresh} />}
+      {page === "levels-breathing" && <LevelsPage uid={authUser.uid} areaKey="breathing" goBack={() => setPage("curso-breathing")} onSaved={refresh} />}
+      {page === "levels-reading" && <LevelsPage uid={authUser.uid} areaKey="reading" goBack={() => setPage("curso-reading")} onSaved={refresh} />}
+      {page === "levels-conversation" && <LevelsPage uid={authUser.uid} areaKey="conversation" goBack={() => setPage("curso-conversation")} onSaved={refresh} />}
+      {page === "levels-articulation" && <LevelsPage uid={authUser.uid} areaKey="articulation" goBack={() => setPage("curso-articulation")} onSaved={refresh} />}
       {page === "profile" && <ProfilePage uid={authUser.uid} profile={profile} onSaved={refresh} />}
     </div>
   );
 }
- 
+
 /* ---------------------- Raíz ---------------------- */
 function Root() {
   const [authUser, setAuthUser] = useState(undefined); // undefined = cargando, null = sin sesión
- 
+
   useEffect(() => {
     if (!firebaseOk) { setAuthUser(null); return; }
     return auth.onAuthStateChanged(setAuthUser);
   }, []);
- 
+
   if (!firebaseOk) return <SetupNeeded />;
   if (authUser === undefined) return <div style={{ padding: 60, textAlign: "center", fontFamily: font }}>Cargando…</div>;
   if (authUser === null) return <AuthScreen />;
   return <LoggedInApp authUser={authUser} />;
 }
- 
+
 ReactDOM.createRoot(document.getElementById("root")).render(<Root />);
 </script>
- 
+
 <script>
 // Transformamos el bloque de arriba a mano, forzando el modo "clásico" de
 // JSX (React.createElement) en vez del modo "automático" (que usa `import`
