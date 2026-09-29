@@ -19,8 +19,7 @@
 
 <style>
   * { box-sizing: border-box; }
-  body { margin: 0; }
-</style>
+  body { margin: 0; background: #fff; }</style>
 </head>
 <body>
 <div id="root"></div>
@@ -134,7 +133,6 @@ function SetupNeeded() {
     </div>
   );
 }
-
 /* ---------------------- Autenticación ---------------------- */
 const AUTH_PHASES = [
   { label: "INHALA", seconds: 4, scale: 1 },
@@ -147,9 +145,9 @@ const AUTH_CSS = `
   --ink:#16302B; --ink-soft:#4B615C; --canvas:#F5F8F6; --card:#FFFFFF;
   --teal:#1F5C52; --teal-dark:#123832; --mint:#DCECE6; --mint-soft:#EDF5F2;
   --amber:#E3A34E; --amber-soft:#FBEAD2; --border:#DCE6E2; --danger:#B3452F;
-  min-height:100vh; background:var(--canvas); color:var(--ink);
+  min-height:100vh; background:transparent; color:var(--ink);
   font-family:'Inter',sans-serif; -webkit-font-smoothing:antialiased;
-  display:flex; flex-direction:column;
+  display:flex; flex-direction:column; position:relative;
   padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
 }
 .au-page *{ box-sizing:border-box; }
@@ -169,7 +167,7 @@ const AUTH_CSS = `
 .au-main{ flex:1; display:flex; align-items:center; justify-content:center; padding:24px 28px 48px; }
 .au-stage{
   width:100%; max-width:960px; display:grid; grid-template-columns:1fr 1fr;
-  background:var(--card); border:1px solid var(--border); border-radius:28px; overflow:hidden;
+  background:rgba(255,255,255,.55); border:1px solid var(--border); border-radius:28px; overflow:hidden;
   box-shadow:0 40px 80px -48px rgba(18,56,50,.35); min-height:600px;
 }
 
@@ -267,6 +265,111 @@ const AUTH_CSS = `
 }
 `;
 
+/* Fondo de partículas global: se monta UNA vez en <Root>, detrás de toda la app */
+function ParticleBackground() {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const canvas = ref.current;
+    const ctx = canvas.getContext("2d");
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const RGB = "31,92,82"; // #1f5c52
+    const LINK_DIST = 120;
+    const MOUSE_DIST = 150;
+
+    let w = 0, h = 0, raf = 0, particles = [];
+    const mouse = { x: -9999, y: -9999 };
+
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      w = canvas.clientWidth;
+      h = canvas.clientHeight;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const count = Math.min(110, Math.max(40, Math.round((w * h) / 14000)));
+      particles = Array.from({ length: count }, () => {
+        const bvx = (Math.random() - 0.5) * 0.3;
+        const bvy = (Math.random() - 0.5) * 0.3;
+        return {
+          x: Math.random() * w, y: Math.random() * h,
+          vx: bvx, vy: bvy, bvx, bvy,
+          r: 1.5 + Math.random() * 2,
+          a: 0.35 + Math.random() * 0.3,
+        };
+      });
+    };
+
+    const draw = () => {
+      ctx.clearRect(0, 0, w, h);
+
+      for (const p of particles) {
+        const dx = p.x - mouse.x, dy = p.y - mouse.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < MOUSE_DIST && dist > 0.1) {
+          const f = (1 - dist / MOUSE_DIST) * 0.6;
+          p.vx += (dx / dist) * f;
+          p.vy += (dy / dist) * f;
+        }
+        p.vx += (p.bvx - p.vx) * 0.03;
+        p.vy += (p.bvy - p.vy) * 0.03;
+        p.x += p.vx; p.y += p.vy;
+
+        if (p.x < -10) p.x = w + 10; else if (p.x > w + 10) p.x = -10;
+        if (p.y < -10) p.y = h + 10; else if (p.y > h + 10) p.y = -10;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${RGB},${p.a})`;
+        ctx.fill();
+      }
+
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const a = particles[i], b = particles[j];
+          const d = Math.hypot(a.x - b.x, a.y - b.y);
+          if (d < LINK_DIST) {
+            ctx.strokeStyle = `rgba(${RGB},${0.2 * (1 - d / LINK_DIST)})`;
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+          }
+        }
+        const p = particles[i];
+        const dm = Math.hypot(p.x - mouse.x, p.y - mouse.y);
+        if (dm < MOUSE_DIST + 30) {
+          ctx.strokeStyle = `rgba(${RGB},${0.3 * (1 - dm / (MOUSE_DIST + 30))})`;
+          ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(mouse.x, mouse.y); ctx.stroke();
+        }
+      }
+
+      if (!reduceMotion) raf = requestAnimationFrame(draw);
+    };
+
+    const onMove = (e) => { mouse.x = e.clientX; mouse.y = e.clientY; };
+    const onLeave = () => { mouse.x = -9999; mouse.y = -9999; };
+
+    resize();
+    draw();
+    window.addEventListener("resize", resize);
+    window.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerleave", onLeave);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", resize);
+      window.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerleave", onLeave);
+    };
+  }, []);
+
+  return (
+    <canvas ref={ref} aria-hidden="true" style={{
+      position: "fixed", top: 0, left: 0, width: "100%", height: "100%",
+      pointerEvents: "none", zIndex: 0,
+    }} />
+  );
+}
+
 function AuthScreen() {
   const [mode, setMode] = useState("login");
   const [name, setName] = useState("");
@@ -276,7 +379,6 @@ function AuthScreen() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Anillo de respiración decorativo del panel
   const [ringPhase, setRingPhase] = useState("TOCA PARA EMPEZAR");
   const [ringCount, setRingCount] = useState("—");
   const [ringScale, setRingScale] = useState(0.78);
@@ -330,7 +432,6 @@ function AuthScreen() {
   const switchMode = (m) => { setMode(m); setError(""); };
   const passOk = password.length >= 6;
 
-  // --- Lógica de Firebase: idéntica a la anterior ---
   const submit = async (e) => {
     e.preventDefault();
     setError(""); setLoading(true);
@@ -441,21 +542,6 @@ function AuthScreen() {
       </main>
     </div>
   );
-}
-const inputStyle = {
-  width: "100%", padding: "11px 14px", borderRadius: 10, border: `1.5px solid ${colors.border}`,
-  fontFamily: font, fontSize: 14, marginBottom: 10, outline: "none",
-};
-function traducirErrorFirebase(code) {
-  const m = {
-    "auth/email-already-in-use": "Ese correo ya está registrado.",
-    "auth/invalid-email": "Correo inválido.",
-    "auth/weak-password": "La contraseña necesita al menos 6 caracteres.",
-    "auth/user-not-found": "No existe una cuenta con ese correo.",
-    "auth/wrong-password": "Contraseña incorrecta.",
-    "auth/invalid-credential": "Correo o contraseña incorrectos.",
-  };
-  return m[code];
 }
 
 /* ---------------------- Firestore: helpers de datos reales ---------------------- */
@@ -648,8 +734,9 @@ const READING_TEXTS = [
   { id: "r11", level: "avanzado", topic: "ciencia", title: "El sistema solar", text: "Nuestro sistema solar contiene ocho planetas que orbitan alrededor del sol, cada uno con características atmosféricas completamente distintas." },
   { id: "r12", level: "avanzado", topic: "peliculas", title: "El montaje", text: "El proceso de edición permite transformar horas de grabación en una historia coherente, decidiendo qué escenas conservar y en qué orden contarlas." },
 ];
-const LEVELS = [["facil", "🟢 Fácil"], ["intermedio", "🟡 Intermedio"], ["avanzado", "🔴 Avanzado"]];
+const LEVEL_COLORS = { facil: "#2E7D32", intermedio: "#E3A34E", avanzado: "#FF0000" };
 const TOPICS = [["deportes", "Deportes"], ["videojuegos", "Videojuegos"], ["ciencia", "Ciencia"], ["peliculas", "Películas"]];
+const LEVELS = [["facil", "Fácil"], ["intermedio", "Intermedio"], ["avanzado", "Avanzado"]];
 
 // Autoreporte, no diagnóstico: el usuario cuenta lo que le pasa, en sus
 // propias palabras. Speaksy nunca determina esto por sí solo.
@@ -1074,8 +1161,8 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
             {LEVELS.map(([id, label]) => (
               <button key={id} onClick={() => setLevel(id)} style={{
                 padding: "9px 16px", borderRadius: 999, cursor: "pointer",
-                border: `1.5px solid ${level === id ? colors.teal : colors.border}`,
-                background: level === id ? colors.teal : "#fff", color: level === id ? "#fff" : colors.ink,
+                border: `1.5px solid ${level === id ? LEVEL_COLORS[id] : colors.border}`,
+                background: level === id ? LEVEL_COLORS[id] : "#fff",
                 fontFamily: font, fontWeight: 600, fontSize: 13.5,
               }}>{label}</button>
             ))}
@@ -1709,40 +1796,37 @@ function ConversationLevelRunner({ level, onFinish }) {
 }
 
 /* ---------------------- Camino de niveles (estilo Duolingo) ---------------------- */
-function LevelPath({ areaLabel, levels, progress, onSelect, goBack }) {
+function LevelPathList({ levels, progress, onSelect }) {
   const completedIds = Object.keys(progress).map(Number);
   const nextAvailable = completedIds.length === 0 ? 1 : Math.min(levels.length, Math.max(...completedIds) + 1);
 
   return (
-    <div style={{ maxWidth: 480, margin: "0 auto", padding: "36px 24px 100px" }}>
-      <button onClick={goBack} style={backLinkStyle}>← Volver</button>
-      <h1 style={{ fontFamily: display, fontSize: 24, color: colors.ink, marginBottom: 24 }}>{areaLabel}</h1>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-        {levels.map((lvl, i) => {
-          const done = progress[lvl.id];
-          const locked = lvl.id > nextAvailable;
-          const current = lvl.id === nextAvailable && !done;
-          return (
-            <div key={lvl.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
-              {i > 0 && <div style={{ width: 2, height: 22, background: colors.border }} />}
-              <button
-                onClick={() => !locked && onSelect(lvl)}
-                disabled={locked}
-                style={{
-                  width: "100%", display: "flex", alignItems: "center", gap: 14, padding: "14px 18px",
-                  borderRadius: 16, border: `1.5px solid ${done ? colors.teal : current ? colors.amber : colors.border}`,
-                  background: locked ? colors.canvas : "#fff", cursor: locked ? "not-allowed" : "pointer",
-                  opacity: locked ? 0.55 : 1, textAlign: "left",
-                }}
-              >
-                <div style={{
-                  width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
-                  background: done ? colors.teal : current ? colors.amberSoft : colors.mintSoft,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontFamily: mono, fontWeight: 700, fontSize: 15,
-                  color: done ? "#fff" : current ? "#8A5A16" : colors.inkSoft,
-                }}>
-                  {done ? "✓" : locked ? (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+      {levels.map((lvl, i) => {
+        const done = progress[lvl.id];
+        const locked = lvl.id > nextAvailable;
+        const current = lvl.id === nextAvailable && !done;
+        return (
+          <div key={lvl.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
+            {i > 0 && <div style={{ width: 2, height: 22, background: colors.border }} />}
+            <button
+              onClick={() => !locked && onSelect(lvl)}
+              disabled={locked}
+              style={{
+                width: "100%", display: "flex", alignItems: "center", gap: 14, padding: "14px 18px",
+                borderRadius: 16, border: `1.5px solid ${done ? colors.teal : current ? colors.amber : colors.border}`,
+                background: locked ? colors.canvas : "#fff", cursor: locked ? "not-allowed" : "pointer",
+                opacity: locked ? 0.55 : 1, textAlign: "left",
+              }}
+            >
+              <div style={{
+                width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
+                background: done ? colors.teal : current ? colors.amberSoft : colors.mintSoft,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontFamily: mono, fontWeight: 700, fontSize: 15,
+                color: done ? "#fff" : current ? "#8A5A16" : colors.inkSoft,
+              }}>
+                {done ? "✓" : locked ? (
   <img
     src="fotos/candado.png"
     alt="Bloqueado"
@@ -1753,13 +1837,13 @@ function LevelPath({ areaLabel, levels, progress, onSelect, goBack }) {
     }}
   />
 ) : lvl.id}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontFamily: font, fontWeight: 700, fontSize: 14.5, color: colors.ink }}>{lvl.title}</div>
-                  <div style={{ fontFamily: font, fontSize: 12, color: colors.inkSoft }}>{lvl.desc}</div>
-                  {done && (
-                    <div style={{ fontFamily: mono, fontSize: 12, color: colors.amber, marginTop: 4 }}>
-                     <div style={{
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: font, fontWeight: 700, fontSize: 14.5, color: colors.ink }}>{lvl.title}</div>
+                <div style={{ fontFamily: font, fontSize: 12, color: colors.inkSoft }}>{lvl.desc}</div>
+                {done && (
+                  <div style={{ fontFamily: mono, fontSize: 12, color: colors.amber, marginTop: 4 }}>
+                   <div style={{
   display: "flex",
   alignItems: "center",
   gap: 3,
@@ -1783,14 +1867,23 @@ function LevelPath({ areaLabel, levels, progress, onSelect, goBack }) {
     
   </span>
 </div>
-                    </div>
-                  )}
-                </div>
-              </button>
-            </div>
-          );
-        })}
-      </div>
+                  </div>
+                )}
+              </div>
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function LevelPath({ areaLabel, levels, progress, onSelect, goBack }) {
+  return (
+    <div style={{ maxWidth: 480, margin: "0 auto", padding: "36px 24px 100px" }}>
+      <button onClick={goBack} style={backLinkStyle}>← Volver</button>
+      <h1 style={{ fontFamily: display, fontSize: 24, color: colors.ink, marginBottom: 24 }}>{areaLabel}</h1>
+      <LevelPathList levels={levels} progress={progress} onSelect={onSelect} />
     </div>
   );
 }
@@ -1843,6 +1936,161 @@ function LevelsPage({ uid, areaKey, goBack, onSaved }) {
   }
 
   return <LevelPath areaLabel={area.label} levels={area.levels} progress={progress} onSelect={setActiveLevel} goBack={goBack} />;
+}
+
+/* ---------------------- Inicio: curso abierto + selector de cursos ---------------------- */
+function CourseDropdown({ areaKey, onChange, progressSummary }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClickOutside = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [open]);
+
+  const current = LEVEL_AREAS[areaKey];
+
+  return (
+    <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
+      <button onClick={() => setOpen((o) => !o)} style={{
+        display: "flex", alignItems: "center", gap: 10, background: "#fff",
+        border: `1.5px solid ${colors.border}`, borderRadius: 14, padding: "10px 16px",
+        cursor: "pointer", fontFamily: font,
+      }}>
+        <img src={current.image} alt={current.label} style={{ width: 26, height: 26, objectFit: "contain" }} />
+        <div style={{ textAlign: "left" }}>
+          <div style={{ fontWeight: 700, fontSize: 14.5, color: colors.ink }}>{current.label}</div>
+          {progressSummary && (
+            <div style={{ fontFamily: mono, fontSize: 11, color: colors.inkSoft }}>
+              {progressSummary[areaKey].done}/{progressSummary[areaKey].total} niveles
+            </div>
+          )}
+        </div>
+        <span style={{ marginLeft: 6, color: colors.inkSoft, fontSize: 12 }}>{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div style={{
+          position: "absolute", left: 0, top: "calc(100% + 8px)", background: "#fff",
+          border: `1px solid ${colors.border}`, borderRadius: 14, boxShadow: "0 8px 24px rgba(22,48,43,.12)",
+          minWidth: 240, overflow: "hidden", zIndex: 40,
+        }}>
+          {Object.keys(LEVEL_AREAS).map((k) => {
+            const a = LEVEL_AREAS[k];
+            return (
+              <button key={k} onClick={() => { onChange(k); setOpen(false); }} style={{
+                display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
+                padding: "12px 16px", background: k === areaKey ? colors.mintSoft : "transparent",
+                border: "none", cursor: "pointer", fontFamily: font,
+              }}>
+                <img src={a.image} alt={a.label} style={{ width: 24, height: 24, objectFit: "contain" }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13.5, color: colors.ink }}>{a.label}</div>
+                  {progressSummary && (
+                    <div style={{ fontFamily: mono, fontSize: 11, color: colors.inkSoft }}>
+                      {progressSummary[k].done}/{progressSummary[k].total} niveles
+                    </div>
+                  )}
+                </div>
+                {k === areaKey && <span style={{ color: colors.teal, fontWeight: 700 }}>✓</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Página principal después de iniciar sesión: abre directo en el curso más
+// avanzado (el que tenga más niveles completados; si nadie ha completado
+// nada, empieza por respiración), con un dropdown arriba para cambiar de
+// curso sin pasar por "Mis cursos".
+function CourseHome({ uid, navigate, xp }) {
+  const [progressByArea, setProgressByArea] = useState(null);
+  const [areaKey, setAreaKey] = useState(null);
+  const [activeLevel, setActiveLevel] = useState(null);
+  const [result, setResult] = useState(null);
+
+  const loadAll = async (keepArea) => {
+    const pairs = await Promise.all(Object.keys(LEVEL_AREAS).map((k) => loadLevelProgress(uid, k).then((p) => [k, p])));
+    const map = Object.fromEntries(pairs);
+    setProgressByArea(map);
+    if (!keepArea) {
+      let best = Object.keys(LEVEL_AREAS)[0];
+      let bestCount = -1;
+      for (const k of Object.keys(LEVEL_AREAS)) {
+        const count = Object.keys(map[k] || {}).length;
+        if (count > bestCount) { bestCount = count; best = k; }
+      }
+      setAreaKey(best);
+    }
+  };
+
+  useEffect(() => { loadAll(false); }, []);
+
+  if (progressByArea === null || areaKey === null) {
+    return <p style={{ padding: 60, textAlign: "center", fontFamily: font, color: colors.inkSoft }}>Cargando…</p>;
+  }
+
+  const progressSummary = Object.fromEntries(
+    Object.keys(LEVEL_AREAS).map((k) => [k, { done: Object.keys(progressByArea[k] || {}).length, total: LEVEL_AREAS[k].levels.length }])
+  );
+
+  const area = LEVEL_AREAS[areaKey];
+  const progress = progressByArea[areaKey] || {};
+
+  const handleFinish = async (fraction, durationSeconds) => {
+    const stars = starsFor(fraction);
+    const xpGained = xpForStars(stars);
+    await saveLevelResult(uid, areaKey, activeLevel.id, stars, durationSeconds);
+    setResult({ stars, xp: xpGained, title: activeLevel.title });
+    setActiveLevel(null);
+    await loadAll(true);
+  };
+
+  if (result) {
+    return (
+      <div style={{ maxWidth: 480, margin: "0 auto", padding: "60px 24px", textAlign: "center" }}>
+        <div style={{ fontSize: 44, marginBottom: 10 }}>{"⭐".repeat(result.stars)}{"☆".repeat(3 - result.stars)}</div>
+        <h1 style={{ fontFamily: display, fontSize: 26, color: colors.ink, marginBottom: 8 }}>¡Nivel completado!</h1>
+        <p style={{ fontFamily: font, color: colors.inkSoft, marginBottom: 6 }}>{result.title}</p>
+        <p style={{ fontFamily: mono, fontSize: 15, color: colors.teal, marginBottom: 26 }}>+{result.xp} XP</p>
+        <PrimaryButton onClick={() => setResult(null)}>Volver al camino</PrimaryButton>
+      </div>
+    );
+  }
+
+  if (activeLevel) {
+    return (
+      <div style={{ maxWidth: 560, margin: "0 auto", padding: "36px 24px 100px" }}>
+        <button onClick={() => setActiveLevel(null)} style={backLinkStyle}>← Salir del nivel</button>
+        <h1 style={{ fontFamily: display, fontSize: 22, color: colors.ink, marginBottom: 4 }}>{activeLevel.title}</h1>
+        <p style={{ fontFamily: font, fontSize: 13.5, color: colors.inkSoft, marginBottom: 22 }}>{activeLevel.desc}</p>
+        {areaKey === "breathing" && <BreathingLevelRunner level={activeLevel} onFinish={handleFinish} onExit={() => setActiveLevel(null)} />}
+        {(areaKey === "reading" || areaKey === "articulation") && <TextLevelRunner level={activeLevel} onFinish={handleFinish} />}
+        {areaKey === "conversation" && <ConversationLevelRunner level={activeLevel} onFinish={handleFinish} />}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: 520, margin: "0 auto", padding: "32px 24px 100px" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 18 }}>
+        <div>
+          <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginBottom: 2 }}>Retomando</div>
+          <h1 style={{ fontFamily: display, fontSize: 24, color: colors.ink, margin: 0 }}>{area.label}</h1>
+        </div>
+        <CourseDropdown areaKey={areaKey} onChange={setAreaKey} progressSummary={progressSummary} />
+      </div>
+      <div style={{ display: "flex", gap: 10, marginBottom: 22, flexWrap: "wrap" }}>
+        <XpBadge xp={xp || 0} />
+        <GhostButton onClick={() => navigate(COURSES[areaKey].practicePage)}>Practicar libre</GhostButton>
+      </div>
+      <LevelPathList levels={area.levels} progress={progress} onSelect={setActiveLevel} />
+    </div>
+  );
 }
 
 /* ---------------------- Selector de las 4 áreas con niveles ---------------------- */
@@ -2192,72 +2440,6 @@ function MyProgressPage({ stats, xp }) {
   );
 }
 
-function Dashboard({ user, uid, stats, refresh, navigate, focusAreas, xp }) {
-  const recs = recommendationsFor(focusAreas);
-  const level = levelFor(xp || 0);
-  const [progress, setProgress] = useState(null);
-
-  useEffect(() => {
-    Promise.all(Object.keys(COURSES).map((k) => loadLevelProgress(uid, k).then((p) => [k, p])))
-      .then((pairs) => setProgress(Object.fromEntries(pairs)));
-  }, []);
-
-  const enrolled = progress ? Object.keys(COURSES).filter((k) => Object.keys(progress[k] || {}).length > 0) : [];
-  const available = progress ? Object.keys(COURSES).filter((k) => !enrolled.includes(k)) : [];
-
-  return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: "36px 24px 90px" }}>
-      <h1 style={{ fontFamily: display, fontSize: 28, color: colors.ink, marginBottom: 2 }}>Hola, {user.name || user.email}.</h1>
-      <p style={{ fontFamily: font, color: colors.inkSoft, marginBottom: 22 }}>Elige un curso para comenzar.</p>
-
-      <Card style={{ marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <Pill>Nivel {level.number} · {level.title}</Pill>
-          <XpBadge xp={xp || 0} />
-        </div>
-        <GhostButton onClick={() => navigate("progress")}>Ver mi progreso</GhostButton>
-      </Card>
-
-      {progress === null ? (
-        <p style={{ fontFamily: font, color: colors.inkSoft }}>Cargando tus cursos…</p>
-      ) : (
-        <>
-          {enrolled.length > 0 && (
-            <div style={{ marginBottom: 28 }}>
-              <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 12 }}>Continúa donde quedaste</div>
-              <CourseCatalog courseKeys={enrolled} onSelect={(k) => navigate("curso-" + k)} progress={progress} />
-            </div>
-          )}
-          {available.length > 0 && (
-            <div>
-              <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 12 }}>
-                {enrolled.length > 0 ? "Cursos disponibles" : "Elige un curso para comenzar"}
-              </div>
-              <CourseCatalog courseKeys={available} onSelect={(k) => navigate("curso-" + k)} />
-            </div>
-          )}
-        </>
-      )}
-
-      {recs.length > 0 && (
-        <Card style={{ marginTop: 24 }}>
-          <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 12 }}>Recomendado para ti</div>
-          <div style={{ display: "grid", gridTemplateColumns: `repeat(${recs.length}, 1fr)`, gap: 12 }}>
-            {recs.map((r) => (
-              <div key={r.page} onClick={() => navigate(r.page)} style={{
-                border: `1.5px solid ${colors.border}`, borderRadius: 14, padding: 14, cursor: "pointer",
-              }}>
-                <div style={{ fontFamily: font, fontWeight: 600, fontSize: 14, color: colors.ink, marginBottom: 4 }}>{r.label}</div>
-                <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft }}>{r.blurb}</div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-    </div>
-  );
-}
-
 /* ---------------------- Ranking (opcional, por XP de constancia) ---------------------- */
 function LeaderboardPage({ uid }) {
   const [rows, setRows] = useState(null);
@@ -2590,9 +2772,9 @@ function LoggedInApp({ authUser }) {
   const user = { name: profile.name, email: profile.email };
 
   return (
-    <div style={{ background: colors.canvas, minHeight: "100vh" }}>
+    <div style={{ background: "transparent", minHeight: "100vh" }}>
       <TopBar page={page} navigate={setPage} onLogout={() => auth.signOut()} />
-      {page === "dashboard" && <Dashboard user={user} uid={authUser.uid} stats={stats} refresh={refresh} navigate={setPage} focusAreas={profile.focusAreas} xp={profile.xp || 0} />}
+      {page === "dashboard" && <CourseHome uid={authUser.uid} navigate={setPage} xp={profile.xp || 0} />}
       {page === "mis-cursos" && <MyCoursesPage uid={authUser.uid} navigate={setPage} />}
       {page === "curso-breathing" && <CourseDetailPage areaKey="breathing" uid={authUser.uid} navigate={setPage} goBack={() => setPage("mis-cursos")} />}
       {page === "curso-reading" && <CourseDetailPage areaKey="reading" uid={authUser.uid} navigate={setPage} goBack={() => setPage("mis-cursos")} />}
@@ -2624,10 +2806,18 @@ function Root() {
     return auth.onAuthStateChanged(setAuthUser);
   }, []);
 
-  if (!firebaseOk) return <SetupNeeded />;
-  if (authUser === undefined) return <div style={{ padding: 60, textAlign: "center", fontFamily: font }}>Cargando…</div>;
-  if (authUser === null) return <AuthScreen />;
-  return <LoggedInApp authUser={authUser} />;
+  let content;
+  if (!firebaseOk) content = <SetupNeeded />;
+  else if (authUser === undefined) content = <div style={{ padding: 60, textAlign: "center", fontFamily: font }}>Cargando…</div>;
+  else if (authUser === null) content = <AuthScreen />;
+  else content = <LoggedInApp authUser={authUser} />;
+
+  return (
+    <>
+      <ParticleBackground />
+      <div style={{ position: "relative", zIndex: 1 }}>{content}</div>
+    </>
+  );
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<Root />);
