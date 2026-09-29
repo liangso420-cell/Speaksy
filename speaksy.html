@@ -100,6 +100,15 @@ function Pill({ children }) {
     }}>{children}</span>
   );
 }
+function XpBadge({ xp }) {
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", fontFamily: mono, fontSize: 13, fontWeight: 700,
+      color: "#9A5A12", background: colors.amberSoft, border: `1.5px solid ${colors.amber}`,
+      borderRadius: 999, padding: "5px 12px",
+    }}>{xp} XP</span>
+  );
+}
 function StatCard({ label, value }) {
   return (
     <Card style={{ padding: 18 }}>
@@ -127,14 +136,201 @@ function SetupNeeded() {
 }
 
 /* ---------------------- Autenticación ---------------------- */
+const AUTH_PHASES = [
+  { label: "INHALA", seconds: 4, scale: 1 },
+  { label: "MANTÉN", seconds: 2, scale: 1 },
+  { label: "EXHALA", seconds: 6, scale: 0.78 },
+];
+
+const AUTH_CSS = `
+.au-page{
+  --ink:#16302B; --ink-soft:#4B615C; --canvas:#F5F8F6; --card:#FFFFFF;
+  --teal:#1F5C52; --teal-dark:#123832; --mint:#DCECE6; --mint-soft:#EDF5F2;
+  --amber:#E3A34E; --amber-soft:#FBEAD2; --border:#DCE6E2; --danger:#B3452F;
+  min-height:100vh; background:var(--canvas); color:var(--ink);
+  font-family:'Inter',sans-serif; -webkit-font-smoothing:antialiased;
+  display:flex; flex-direction:column;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+.au-page *{ box-sizing:border-box; }
+.au-nav{ display:flex; align-items:center; justify-content:space-between; padding:18px 28px; }
+.au-wordmark{ display:flex; align-items:center; gap:10px; font-family:'Fraunces',serif; font-size:20px; font-weight:600; }
+.au-dot{ width:32px; height:32px; border-radius:9px; background:var(--teal); position:relative; flex-shrink:0; }
+.au-dot::after{
+  content:""; position:absolute; inset:8px; border:2px solid var(--mint); border-radius:50%;
+  border-right-color:transparent; border-bottom-color:transparent; transform:rotate(45deg);
+}
+.au-nav-quiet{
+  font-size:14px; font-weight:600; color:var(--ink-soft); text-decoration:none;
+  border-bottom:1.5px solid var(--border); padding-bottom:2px;
+}
+.au-nav-quiet:hover{ color:var(--teal); border-color:var(--teal); }
+
+.au-main{ flex:1; display:flex; align-items:center; justify-content:center; padding:24px 28px 48px; }
+.au-stage{
+  width:100%; max-width:960px; display:grid; grid-template-columns:1fr 1fr;
+  background:var(--card); border:1px solid var(--border); border-radius:28px; overflow:hidden;
+  box-shadow:0 40px 80px -48px rgba(18,56,50,.35); min-height:600px;
+}
+
+.au-panel{
+  background:linear-gradient(165deg,var(--teal),var(--teal-dark)); color:#fff;
+  padding:44px 40px; display:flex; flex-direction:column; justify-content:space-between; gap:24px;
+}
+.au-kicker{
+  font-size:13px; color:var(--amber-soft); font-weight:600;
+  display:inline-flex; align-items:center; gap:8px; margin-bottom:16px;
+}
+.au-kicker::before{ content:""; width:7px; height:7px; border-radius:50%; background:var(--amber); }
+.au-panel h1{
+  font-family:'Fraunces',serif; font-weight:600; font-size:clamp(1.7rem,2.6vw,2.1rem);
+  line-height:1.18; margin:0 0 10px; max-width:14ch; color:#fff;
+}
+.au-lede{ font-size:14.5px; line-height:1.6; color:#CFE3DE; max-width:26ch; margin:0; }
+
+.au-ring-wrap{
+  align-self:center; width:176px; height:176px; position:relative;
+  display:flex; align-items:center; justify-content:center; cursor:pointer;
+  background:none; border:none; padding:0; color:inherit; font:inherit;
+}
+.au-ring-fill{
+  position:absolute; inset:0; border-radius:50%;
+  background:radial-gradient(circle, rgba(220,236,230,.9) 0%, rgba(220,236,230,.15) 72%);
+}
+.au-ring-outline{ position:absolute; inset:0; border-radius:50%; border:2px solid rgba(255,255,255,.25); }
+.au-ring-text{ position:relative; text-align:center; }
+.au-ring-phase{ font-size:11.5px; font-weight:700; letter-spacing:2px; color:var(--amber-soft); }
+.au-ring-count{ font-family:'IBM Plex Mono',monospace; font-size:32px; font-weight:600; margin-top:2px; color:#fff; }
+.au-quote{ font-size:13px; color:#9FC3BA; margin:0; }
+
+.au-form-side{ padding:44px; display:flex; flex-direction:column; justify-content:center; }
+.au-tabs{
+  position:relative; display:grid; grid-template-columns:1fr 1fr;
+  background:var(--mint-soft); border:1px solid var(--border); border-radius:999px;
+  padding:4px; margin-bottom:28px;
+}
+.au-thumb{
+  position:absolute; top:4px; bottom:4px; left:4px; width:calc(50% - 4px);
+  background:var(--teal); border-radius:999px; transition:transform .25s ease;
+}
+.au-tabs[data-active="register"] .au-thumb{ transform:translateX(100%); }
+.au-tabs button{
+  position:relative; z-index:1; border:none; background:none; padding:10px 12px;
+  font-family:'Inter',sans-serif; font-weight:600; font-size:14px; color:var(--ink-soft);
+  cursor:pointer; border-radius:999px; transition:color .2s ease;
+}
+.au-tabs button.active{ color:#fff; }
+
+.au-title{ font-family:'Fraunces',serif; font-weight:600; font-size:22px; margin:0 0 22px; color:var(--ink); }
+.au-field{ margin-bottom:16px; }
+.au-field label{ display:block; font-size:12.5px; font-weight:600; color:var(--ink-soft); margin-bottom:6px; }
+.au-control{ position:relative; }
+.au-field input{
+  width:100%; padding:12px 14px; font:inherit; font-size:14.5px; color:var(--ink);
+  background:var(--card); border:1.5px solid var(--border); border-radius:10px;
+}
+.au-field input:focus-visible{ outline:3px solid var(--mint); outline-offset:1px; border-color:var(--teal); }
+.au-toggle-pass{
+  position:absolute; right:8px; top:50%; transform:translateY(-50%);
+  background:none; border:none; font-family:'IBM Plex Mono',monospace; font-size:11.5px; font-weight:600;
+  color:var(--teal); cursor:pointer; padding:4px 6px; letter-spacing:.5px;
+}
+.au-hint{ font-size:12.5px; color:var(--ink-soft); margin-top:6px; }
+.au-hint.ok{ color:var(--teal); }
+.au-error{
+  background:#FBEAE5; border:1px solid var(--border); border-radius:12px; padding:11px 14px;
+  font-size:13.5px; color:var(--danger); line-height:1.5; margin-bottom:8px;
+}
+.au-submit{
+  width:100%; margin-top:8px; padding:14px; border:none; border-radius:10px;
+  background:var(--amber); color:var(--teal-dark); font-family:'Inter',sans-serif;
+  font-weight:700; font-size:15.5px; cursor:pointer; transition:background .15s ease, transform .1s ease;
+}
+.au-submit:hover:not(:disabled){ background:#eab568; }
+.au-submit:active:not(:disabled){ transform:translateY(1px); }
+.au-submit:disabled{ opacity:.7; cursor:not-allowed; }
+.au-submit:focus-visible{ outline:3px solid var(--teal); outline-offset:2px; }
+.au-foot{ text-align:center; margin-top:20px; font-size:13.5px; color:var(--ink-soft); }
+.au-foot button{
+  background:none; border:none; padding:0; font:inherit; color:var(--teal); font-weight:600; cursor:pointer;
+}
+.au-foot button:hover{ text-decoration:underline; }
+
+@media (max-width:820px){
+  .au-stage{ grid-template-columns:1fr; min-height:0; }
+  .au-panel{ padding:32px 28px; min-height:200px; }
+  .au-form-side{ padding:32px 24px; }
+}
+@media (prefers-reduced-motion: reduce){
+  .au-ring-fill{ transition:none !important; }
+  .au-thumb{ transition:none; }
+}
+`;
+
 function AuthScreen() {
   const [mode, setMode] = useState("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Anillo de respiración decorativo del panel
+  const [ringPhase, setRingPhase] = useState("TOCA PARA EMPEZAR");
+  const [ringCount, setRingCount] = useState("—");
+  const [ringScale, setRingScale] = useState(0.78);
+  const [ringTransition, setRingTransition] = useState("transform .6s ease");
+  const runningRef = useRef(false);
+  const tickRef = useRef(null);
+
+  useEffect(() => () => {
+    runningRef.current = false;
+    clearInterval(tickRef.current);
+  }, []);
+
+  const stopRing = () => {
+    runningRef.current = false;
+    clearInterval(tickRef.current);
+    setRingPhase("TOCA PARA EMPEZAR");
+    setRingCount("—");
+    setRingTransition("transform .6s ease");
+    setRingScale(0.78);
+  };
+
+  const runPhase = (i, cyclesLeft) => {
+    if (!runningRef.current) return;
+    const p = AUTH_PHASES[i];
+    setRingPhase(p.label);
+    setRingTransition(`transform ${p.seconds}s ease-in-out`);
+    setRingScale(p.scale);
+    let remaining = p.seconds;
+    setRingCount(remaining);
+    clearInterval(tickRef.current);
+    tickRef.current = setInterval(() => {
+      remaining -= 1;
+      if (remaining > 0) { setRingCount(remaining); return; }
+      clearInterval(tickRef.current);
+      const next = (i + 1) % AUTH_PHASES.length;
+      let left = cyclesLeft;
+      if (next === 0) {
+        left -= 1;
+        if (left <= 0) { stopRing(); return; }
+      }
+      runPhase(next, left);
+    }, 1000);
+  };
+
+  const toggleRing = () => {
+    if (runningRef.current) { stopRing(); return; }
+    runningRef.current = true;
+    runPhase(0, 2);
+  };
+
+  const switchMode = (m) => { setMode(m); setError(""); };
+  const passOk = password.length >= 6;
+
+  // --- Lógica de Firebase: idéntica a la anterior ---
   const submit = async (e) => {
     e.preventDefault();
     setError(""); setLoading(true);
@@ -156,32 +352,93 @@ function AuthScreen() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: colors.canvas, fontFamily: font }}>
-      <Card style={{ width: 360 }}>
-        <h1 style={{ fontFamily: display, fontSize: 24, color: colors.ink, marginTop: 0 }}>
-          {mode === "login" ? "Entrar a Speaksy" : "Crear cuenta"}
-        </h1>
-        <form onSubmit={submit}>
-          {mode === "register" && (
-            <input placeholder="Nombre" value={name} onChange={(e) => setName(e.target.value)}
-              style={inputStyle} />
-          )}
-          <input type="email" placeholder="Correo" value={email} required
-            onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
-          <input type="password" placeholder="Contraseña (mín. 6 caracteres)" value={password} required
-            onChange={(e) => setPassword(e.target.value)} style={inputStyle} />
-          {error && <Note tone="danger">{error}</Note>}
-          <PrimaryButton disabled={loading} style={{ width: "100%", justifyContent: "center", marginTop: 12 }}>
-            {loading ? "Un momento…" : mode === "login" ? "Entrar" : "Registrarme"}
-          </PrimaryButton>
-        </form>
-        <button onClick={() => setMode(mode === "login" ? "register" : "login")} style={{
-          background: "none", border: "none", color: colors.teal, fontFamily: font, fontSize: 13.5,
-          marginTop: 14, cursor: "pointer",
-        }}>
-          {mode === "login" ? "¿No tienes cuenta? Regístrate" : "¿Ya tienes cuenta? Entra"}
-        </button>
-      </Card>
+    <div className="au-page">
+      <style>{AUTH_CSS}</style>
+
+      <nav className="au-nav">
+        <div className="au-wordmark"><span className="au-dot"></span>Speaksy</div>
+        <a className="au-nav-quiet" href="index.html">Volver al inicio</a>
+      </nav>
+
+      <main className="au-main">
+        <div className="au-stage">
+          <div className="au-panel">
+            <div>
+              <div className="au-kicker">Espacio de práctica, no un diagnóstico</div>
+              <h1>Un momento para respirar antes de empezar</h1>
+              <p className="au-lede">Toca el círculo y prueba un ciclo, igual que dentro de tus ejercicios.</p>
+            </div>
+
+            <button type="button" className="au-ring-wrap" onClick={toggleRing} aria-label="Probar un ciclo de respiración">
+              <div className="au-ring-fill" style={{ transform: `scale(${ringScale})`, transition: ringTransition }}></div>
+              <div className="au-ring-outline"></div>
+              <div className="au-ring-text">
+                <div className="au-ring-phase">{ringPhase}</div>
+                <div className="au-ring-count">{ringCount}</div>
+              </div>
+            </button>
+
+            <p className="au-quote">«No se trata de hablar perfecto, sino de encontrar tu propia manera.»</p>
+          </div>
+
+          <div className="au-form-side">
+            <div className="au-tabs" data-active={mode}>
+              <span className="au-thumb"></span>
+              <button type="button" className={mode === "login" ? "active" : ""} onClick={() => switchMode("login")}>Iniciar sesión</button>
+              <button type="button" className={mode === "register" ? "active" : ""} onClick={() => switchMode("register")}>Crear cuenta</button>
+            </div>
+
+            <h2 className="au-title">{mode === "login" ? "Bienvenido de vuelta" : "Crea tu cuenta"}</h2>
+
+            <form onSubmit={submit}>
+              {mode === "register" && (
+                <div className="au-field">
+                  <label htmlFor="au-nombre">Nombre</label>
+                  <input type="text" id="au-nombre" autoComplete="name" value={name}
+                    onChange={(e) => setName(e.target.value)} />
+                </div>
+              )}
+
+              <div className="au-field">
+                <label htmlFor="au-correo">Correo</label>
+                <input type="email" id="au-correo" autoComplete="email" required value={email}
+                  onChange={(e) => setEmail(e.target.value)} />
+              </div>
+
+              <div className="au-field">
+                <label htmlFor="au-clave">Contraseña</label>
+                <div className="au-control">
+                  <input type={showPass ? "text" : "password"} id="au-clave" required minLength={6}
+                    autoComplete={mode === "login" ? "current-password" : "new-password"}
+                    value={password} onChange={(e) => setPassword(e.target.value)}
+                    style={{ paddingRight: 84 }} />
+                  <button type="button" className="au-toggle-pass" onClick={() => setShowPass((s) => !s)}>
+                    {showPass ? "OCULTAR" : "MOSTRAR"}
+                  </button>
+                </div>
+                <div className={"au-hint" + (passOk ? " ok" : "")}>
+                  {passOk ? "Contraseña válida" : "Mínimo 6 caracteres"}
+                </div>
+              </div>
+
+              {error && <div className="au-error">{error}</div>}
+
+              <button type="submit" className="au-submit" disabled={loading}>
+                {loading
+                  ? (mode === "login" ? "Entrando…" : "Creando cuenta…")
+                  : (mode === "login" ? "Iniciar sesión" : "Crear cuenta")}
+              </button>
+            </form>
+
+            <div className="au-foot">
+              {mode === "login" ? "¿No tienes cuenta? " : "¿Ya tienes cuenta? "}
+              <button type="button" onClick={() => switchMode(mode === "login" ? "register" : "login")}>
+                {mode === "login" ? "Crea una" : "Inicia sesión"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </main>
     </div>
   );
 }
@@ -1523,6 +1780,7 @@ function LevelPath({ areaLabel, levels, progress, onSelect, goBack }) {
   ))}
   <span style={{ marginLeft: 3 }}>
     · {done.xp} XP
+    
   </span>
 </div>
                     </div>
@@ -1894,18 +2152,32 @@ function MyProgressPage({ stats, xp }) {
       <h1 style={{ fontFamily: display, fontSize: 28, color: colors.ink, marginBottom: 24 }}>Mi progreso</h1>
 
       <Card style={{ marginBottom: 20 }}>
-        <Pill>Nivel {level.number} · {level.title}</Pill>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <Pill>Nivel {level.number} · {level.title}</Pill>
+          <XpBadge xp={xp || 0} />
+        </div>
         <div style={{ fontFamily: mono, fontSize: 13, color: colors.inkSoft, marginTop: 8 }}>
-          {xp || 0} XP{level.next ? ` · faltan ${level.next.min - (xp || 0)} para "${level.next.title}"` : " · nivel máximo"}
+          {level.next ? `Faltan ${level.next.min - (xp || 0)} para "${level.next.title}"` : "Nivel máximo"}
         </div>
       </Card>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 24 }}>
-        <StatCard label="Sesiones realizadas" value={stats.totalSessions} />
-        <StatCard label="Minutos practicados" value={stats.totalMinutes} />
-        <StatCard label="Días seguidos" value={`🔥 ${stats.streak}`} />
-      </div>
-
+  <StatCard label="Sesiones realizadas" value={stats.totalSessions} />
+  <StatCard label="Minutos practicados" value={stats.totalMinutes} />
+  <StatCard
+    label="Días seguidos"
+    value={
+      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <img
+          src="fotos/fuego.png"
+          alt="Racha"
+          style={{ width: 50, height: 55 }}
+        />
+        {stats.streak}
+      </span>
+    }
+  />
+</div>
       <Card>
         <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 12 }}>Actividad reciente</div>
         {recent.length === 0 && <p style={{ fontFamily: font, fontSize: 13.5, color: colors.inkSoft }}>Todavía no hay sesiones. ¡Empieza con una!</p>}
@@ -1939,9 +2211,9 @@ function Dashboard({ user, uid, stats, refresh, navigate, focusAreas, xp }) {
       <p style={{ fontFamily: font, color: colors.inkSoft, marginBottom: 22 }}>Elige un curso para comenzar.</p>
 
       <Card style={{ marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-        <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <Pill>Nivel {level.number} · {level.title}</Pill>
-          <div style={{ fontFamily: mono, fontSize: 13, color: colors.inkSoft, marginTop: 8 }}>{xp || 0} XP</div>
+          <XpBadge xp={xp || 0} />
         </div>
         <GhostButton onClick={() => navigate("progress")}>Ver mi progreso</GhostButton>
       </Card>
