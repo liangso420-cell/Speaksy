@@ -2688,7 +2688,10 @@ function TopBar({ page, navigate, onLogout }) {
   return (
     <div style={{ position: "sticky", top: 0, zIndex: 30, borderBottom: `1px solid ${colors.border}`, background: colors.card }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 24px", fontFamily: font }}>
-        <div onClick={() => go("dashboard")} style={{ fontFamily: display, fontWeight: 600, fontSize: 20, color: colors.ink, cursor: "pointer" }}>Speaksy</div>
+        <div onClick={() => go("dashboard")} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+  <img src="fotos/Logo.png" alt="Speaksy" style={{ height: 34, width: "auto", objectFit: "contain" }} />
+  <span style={{ fontFamily: display, fontWeight: 600, fontSize: 20, color: colors.ink }}>Speaksy</span>
+</div>
         <div ref={menuRef} style={{ position: "relative" }}>
           <button onClick={() => setOpen((o) => !o)} style={{
             display: "flex", alignItems: "center", gap: 8, background: open ? colors.mintSoft : "transparent",
