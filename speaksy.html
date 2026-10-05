@@ -77,11 +77,13 @@ function PrimaryButton({ children, onClick, style, disabled }) {
     }}>{children}</button>
   );
 }
-function GhostButton({ children, onClick, style }) {
+function GhostButton({ children, onClick, style, disabled }) {
   return (
-    <button onClick={onClick} style={{
-      background: "transparent", color: colors.teal, border: `1.5px solid ${colors.teal}`, borderRadius: 999,
-      padding: "12px 24px", fontSize: 15, fontWeight: 600, fontFamily: font, cursor: "pointer",
+    <button disabled={disabled} onClick={disabled ? undefined : onClick} style={{
+      background: "transparent", color: disabled ? colors.inkSoft : colors.teal,
+      border: `1.5px solid ${disabled ? colors.border : colors.teal}`, borderRadius: 999,
+      padding: "12px 24px", fontSize: 15, fontWeight: 600, fontFamily: font,
+      cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.6 : 1,
       display: "inline-flex", alignItems: "center", gap: 8, ...style,
     }}>{children}</button>
   );
@@ -1220,6 +1222,8 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
               background: i < matchedCount ? colors.mintSoft : "transparent",
               color: i < matchedCount ? colors.teal : colors.ink,
               borderRadius: 5, padding: "1px 3px", transition: "background .25s ease, color .25s ease",
+              textDecoration: i < matchedCount ? "underline" : "none",
+              textDecorationColor: colors.teal, textDecorationThickness: 3, textUnderlineOffset: 4,
             }}>{w} </span>
           ))}
         </p>
@@ -1477,7 +1481,7 @@ function ConversationPage({ uid, onSaved, goBack }) {
 
   return (
     <div style={{ maxWidth: 520, margin: "0 auto", padding: "60px 24px 100px", textAlign: "center" }}>
-      <div style={{ fontSize: 40, marginBottom: 12 }}>🎉</div>
+      <div style={{ fontSize: 40, marginBottom: 12 }}>ti</div>
       <h1 style={{ fontFamily: display, fontSize: 24, color: colors.ink }}>¡Buena conversación!</h1>
       <p style={{ fontFamily: font, color: colors.inkSoft, marginBottom: 20 }}>
         Respondiste {answers.length} preguntas. Quedó guardado en tu progreso.
@@ -1543,6 +1547,10 @@ function OnboardingQuestionnaire({ uid, onDone }) {
   );
 }
 
+// Para avanzar hay que decir casi toda la frase correctamente: exigimos la
+// frase completa, o al menos la mayoría de las palabras en el orden correcto.
+const SPEECH_PASS_THRESHOLD = 0.75;
+
 function ArticulationStage({ target, onDone, label }) {
   const [status, setStatus] = useState("idle");
   const [matchedCount, setMatchedCount] = useState(0);
@@ -1581,6 +1589,10 @@ function ArticulationStage({ target, onDone, label }) {
     setStatus("done");
   };
 
+  const fraction = words.length > 0 ? matchedCount / words.length : 0;
+  const passed = fraction >= SPEECH_PASS_THRESHOLD;
+  const missing = words.length - matchedCount;
+
   return (
     <Card style={{ marginBottom: 16 }}>
       <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginBottom: 8 }}>{label}</div>
@@ -1589,17 +1601,25 @@ function ArticulationStage({ target, onDone, label }) {
           <span key={i} style={{
             background: i < matchedCount ? colors.mintSoft : "transparent",
             color: i < matchedCount ? colors.teal : colors.ink, borderRadius: 5, padding: "1px 4px",
+            textDecoration: i < matchedCount ? "underline" : "none",
+            textDecorationColor: colors.teal, textDecorationThickness: 3, textUnderlineOffset: 4,
           }}>{w} </span>
         ))}
       </p>
-      <div style={{ display: "flex", gap: 10 }}>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         {status !== "recording" ? (
-          <PrimaryButton onClick={start}>🎤 Practicar</PrimaryButton>
+          <PrimaryButton onClick={start}>Practicar</PrimaryButton>
         ) : (
           <GhostButton onClick={stop}>⏹ Listo</GhostButton>
         )}
-        <GhostButton onClick={() => onDone(matchedCount, words.length)}>Siguiente →</GhostButton>
+        <GhostButton disabled={!passed} onClick={() => onDone(matchedCount, words.length)}>Siguiente →</GhostButton>
       </div>
+      {!passed && (
+        <p style={{ fontFamily: font, fontSize: 12, color: colors.inkSoft, marginTop: 10 }}>
+          Di al menos la mayoría de la frase correctamente para continuar
+          {matchedCount > 0 ? ` (van ${matchedCount} de ${words.length} palabras — faltan ${missing}).` : ` (${words.length} palabras en total).`}
+        </p>
+      )}
       {!SpeechRecognitionAPI && (
         <p style={{ fontFamily: font, fontSize: 12, color: colors.inkSoft, marginTop: 10 }}>
           Tu navegador no soporta el resaltado en vivo aquí; igual puedes practicar en voz alta y avanzar.
