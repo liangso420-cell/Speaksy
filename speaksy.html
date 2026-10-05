@@ -1024,7 +1024,7 @@ function PronunciationAnalysis({ referenceText, allowAnalysis }) {
         Graba de nuevo esta misma frase para obtener un puntaje de exactitud,
         fluidez y completitud, calculado por un servicio externo (Azure).
       </p>
-      {status === "idle" && <PrimaryButton onClick={start}>🎙️ Grabar y analizar</PrimaryButton>}
+      {status === "idle" && <PrimaryButton onClick={start}>Grabar y analizar</PrimaryButton>}
       {status === "recording" && <GhostButton onClick={stop}>⏹ Detener y analizar</GhostButton>}
       {status === "analyzing" && <Note>Analizando tu pronunciación…</Note>}
       {status === "error" && <Note tone="danger">{error}</Note>}
@@ -1254,7 +1254,7 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
 
       <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 20 }}>
         {status !== "recording" && status !== "done" ? (
-          <PrimaryButton onClick={startRecording}>🎤 Comenzar grabación</PrimaryButton>
+          <PrimaryButton onClick={startRecording}>Comenzar grabación</PrimaryButton>
         ) : status === "recording" ? (
           <GhostButton onClick={finish}>⏹ Terminar</GhostButton>
         ) : null}
@@ -1418,7 +1418,7 @@ function ConversationPage({ uid, onSaved, goBack }) {
         {SpeechRecognitionAPI ? (
           <div style={{ textAlign: "center", marginBottom: 16 }}>
             {!listening ? (
-              <PrimaryButton onClick={startListening}>🎤 Responder por voz</PrimaryButton>
+              <PrimaryButton onClick={startListening}>Responder por voz</PrimaryButton>
             ) : (
               <Note>Escuchando… habla con calma, no hay ninguna prisa.</Note>
             )}
@@ -1797,7 +1797,7 @@ function ConversationLevelRunner({ level, onFinish }) {
       {SpeechRecognitionAPI ? (
         <div style={{ textAlign: "center", marginBottom: 16 }}>
           {!listening ? (
-            <PrimaryButton onClick={startListening}>🎤 Responder por voz</PrimaryButton>
+            <PrimaryButton onClick={startListening}>Responder por voz</PrimaryButton>
           ) : (
             <Note>Escuchando… habla con calma.</Note>
           )}
