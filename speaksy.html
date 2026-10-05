@@ -550,10 +550,6 @@ function todayKey() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/* ---------------------- Niveles por constancia (XP), no por "fluidez" ----------------------
-   A propósito NO rankeamos por qué tan fluida es la voz de alguien — eso
-   sería comparar discapacidades del habla entre sí. Rankeamos por
-   constancia de práctica (XP ganado), que es sano de gamificar. */
 const LEVEL_TITLES = [
   { min: 0, title: "Empezando" },
   { min: 100, title: "Constante" },
@@ -571,7 +567,7 @@ function levelFor(xp) {
   return { number: idx + 1, title: current.title, next };
 }
 function xpForSession(durationSeconds) {
-  return 20 + Math.round(durationSeconds / 10); // fijo por completar + un poco por duración
+  return 20 + Math.round(durationSeconds / 10);
 }
 
 async function saveSession(uid, { category, durationSeconds, extra }) {
@@ -590,7 +586,6 @@ async function saveSession(uid, { category, durationSeconds, extra }) {
   const userRef = db.collection("users").doc(uid);
   await userRef.set({ xp: firebase.firestore.FieldValue.increment(xpGained) }, { merge: true });
 
-  // Si el usuario optó por aparecer en el ranking, mantenemos su copia pública al día.
   const profileSnap = await userRef.get();
   const profile = profileSnap.data() || {};
   if (profile.showOnLeaderboard) {
@@ -669,7 +664,6 @@ function BreathingRing({ size = 220, onFinish }) {
       });
     }, 1000);
     return () => clearInterval(t);
-    // eslint-disable-next-line
   }, [running, phaseIdx]);
 
   const phase = phases[phaseIdx];
@@ -738,8 +732,6 @@ const LEVEL_COLORS = { facil: "#2E7D32", intermedio: "#E3A34E", avanzado: "#FF00
 const TOPICS = [["deportes", "Deportes"], ["videojuegos", "Videojuegos"], ["ciencia", "Ciencia"], ["peliculas", "Películas"]];
 const LEVELS = [["facil", "Fácil"], ["intermedio", "Intermedio"], ["avanzado", "Avanzado"]];
 
-// Autoreporte, no diagnóstico: el usuario cuenta lo que le pasa, en sus
-// propias palabras. Speaksy nunca determina esto por sí solo.
 const FOCUS_AREAS = [
   { id: "tartamudez", label: "Tartamudez", desc: "interrupciones, repeticiones o bloqueos al hablar", recommend: ["breathing", "reading"] },
   { id: "articulacion", label: "Sonidos específicos", desc: "dificultad para pronunciar ciertos sonidos, como /r/, /s/ o /l/", recommend: ["articulation"] },
@@ -759,14 +751,6 @@ const SOUND_BANK = {
   t: { label: "T — como en 'taza'", syllables: "ta te ti to tu", words: "taza pato tren gato", phrase: "El gato toma té en la taza pequeña." },
 };
 
-/* =========================================================
-   NIVELES ESTILO DUOLINGO — 4 áreas, cada una con su propia
-   progresión desbloqueable. Todo lo de aquí para abajo hasta
-   "FIN DE NIVELES" es contenido + lógica nueva; no reemplaza
-   nada de lo que ya existía arriba (respiración libre, lectura
-   libre, conversación libre, articulación libre siguen intactas).
-========================================================= */
-
 function starsFor(fraction) {
   if (fraction >= 0.9) return 3;
   if (fraction >= 0.5) return 2;
@@ -775,6 +759,65 @@ function starsFor(fraction) {
 }
 function xpForStars(stars) {
   return 10 + stars * 15;
+}
+
+const BUILDER_ACTIVITIES = [
+  { key: "breathing", label: "Respiración", desc: "Ejercicios guiados de respiración", image: "fotos/respira.png" },
+  { key: "reading", label: "Lectura", desc: "Textos, frases y lectura en voz alta", image: "fotos/libro.png" },
+  { key: "articulation", label: "Articulación", desc: "Sílabas, palabras, sonidos y trabalenguas", image: "fotos/sonido.png" },
+  { key: "conversation", label: "Conversación", desc: "Preguntas y situaciones conversacionales", image: "fotos/Conv.png" },
+];
+const BUILDER_DURATIONS = [3, 5, 10, 15];
+const BUILDER_DIFFICULTIES = [
+  { id: "principiante", label: "Principiante", desc: "Frases cortas, instrucciones sencillas y ejercicios básicos." },
+  { id: "intermedio", label: "Intermedio", desc: "Frases más largas y actividades con mayor variedad." },
+  { id: "avanzado", label: "Avanzado", desc: "Textos extensos, conversaciones abiertas y ejercicios complejos." },
+];
+const BUILDER_THEMES = ["Tecnología", "Deportes", "Música", "Escuela", "Vida cotidiana", "Viajes", "Ciencia", "Temas libres"];
+const ACTIVITY_LABELS = { breathing: "Respiración", reading: "Lectura", articulation: "Articulación", conversation: "Conversación" };
+
+const THEME_READING_TEMPLATES = {
+  facil: (theme) => `Hoy quiero hablar sobre ${theme.toLowerCase()}. Es un tema que me parece interesante y del que me gusta aprender.`,
+  intermedio: (theme) => `${theme} es un tema que combina curiosidad y aprendizaje constante. Cada vez que investigo un poco más, descubro algo nuevo que no esperaba.`,
+  avanzado: (theme) => `Hablar sobre ${theme.toLowerCase()} implica considerar varios aspectos a la vez: su evolución reciente, su impacto en la vida cotidiana y las preguntas que todavía quedan abiertas para quienes se interesan en profundizar en el tema.`,
+};
+const ARTICULATION_TARGETS = {
+  principiante: "pero cara toro aro",
+  intermedio: "El carro rojo corre rápido por la carretera.",
+  avanzado: "Tres tristes tigres tragaban trigo en un trigal.",
+};
+function themeQuestions(theme) {
+  const t = theme.toLowerCase();
+  return [
+    `¿Qué es lo que más te interesa sobre ${t}?`,
+    `Cuéntame sobre una experiencia relacionada con ${t}.`,
+    `¿Cómo crees que ${t} ha cambiado en los últimos años?`,
+    `Si pudieras aprender algo nuevo sobre ${t}, ¿qué sería?`,
+  ];
+}
+function buildCustomSteps({ activities, duration, difficulty, theme }) {
+  const perMin = duration / Math.max(1, activities.length);
+  const readingLevelMap = { principiante: "facil", intermedio: "intermedio", avanzado: "avanzado" };
+  const order = ["breathing", "reading", "articulation", "conversation"];
+  const steps = [];
+  order.filter((k) => activities.includes(k)).forEach((key) => {
+    if (key === "breathing") {
+      const cycles = Math.max(1, Math.round((perMin * 60) / 12));
+      steps.push({ type: "breathing", key, label: "Respiración guiada", minutes: perMin, level: { cycles } });
+    }
+    if (key === "reading") {
+      const text = THEME_READING_TEMPLATES[readingLevelMap[difficulty]](theme);
+      steps.push({ type: "reading", key, label: `Lectura sobre ${theme.toLowerCase()}`, minutes: perMin, level: { parts: [text] } });
+    }
+    if (key === "articulation") {
+      steps.push({ type: "articulation", key, label: "Palabras y frases", minutes: perMin, level: { parts: [ARTICULATION_TARGETS[difficulty]] } });
+    }
+    if (key === "conversation") {
+      const qCount = Math.max(1, Math.min(4, Math.round(perMin / 1.5)));
+      steps.push({ type: "conversation", key, label: `Preguntas sobre ${theme.toLowerCase()}`, minutes: perMin, level: { questions: themeQuestions(theme).slice(0, qCount) } });
+    }
+  });
+  return steps;
 }
 
 const BREATHING_LEVELS = [
@@ -826,31 +869,10 @@ const ARTICULATION_LEVELS = [
 ];
 
 const LEVEL_AREAS = {
-
-  breathing: {
-    label: "Respiración",
-    image: "fotos/respira.png",
-    levels: BREATHING_LEVELS
-  },
-
-  reading: {
-    label: "Lectura",
-    image: "fotos/libro.png",
-    levels: READING_LEVELS
-  },
-
-  conversation: {
-    label: "Conversación",
-    image: "fotos/Conv.png",
-    levels: CONVERSATION_LEVELS
-  },
-
-  articulation: {
-    label: "Sonido y articulación",
-    image: "fotos/sonido.png",
-    levels: ARTICULATION_LEVELS
-  },
-
+  breathing: { label: "Respiración", image: "fotos/respira.png", levels: BREATHING_LEVELS },
+  reading: { label: "Lectura", image: "fotos/libro.png", levels: READING_LEVELS },
+  conversation: { label: "Conversación", image: "fotos/Conv.png", levels: CONVERSATION_LEVELS },
+  articulation: { label: "Sonido y articulación", image: "fotos/sonido.png", levels: ARTICULATION_LEVELS },
 };
 
 async function loadLevelProgress(uid, area) {
@@ -869,9 +891,6 @@ async function saveLevelResult(uid, area, levelId, stars, durationSeconds) {
   });
 }
 
-// Reconocimiento de voz del navegador (Chrome/Edge lo soportan bien; Safari y
-// Firefox tienen soporte limitado o nulo). No hay backend ni API propia detrás:
-// es el motor de voz que trae el propio navegador.
 const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 function normalizeWord(w) {
@@ -881,11 +900,6 @@ function normalizeWord(w) {
     .replace(/[^\p{L}\p{N}]/gu, "");
 }
 
-/* ---------------------- Análisis de pronunciación real (beta) ----------------------
-   Graba audio de verdad con el micrófono, lo convierte a WAV 16kHz mono, y lo
-   manda a tu Cloud Function (functions/index.js), que a su vez llama a Azure
-   Pronunciation Assessment. Sin FUNCTIONS_URL configurado, el botón avisa que
-   falta desplegar el backend en vez de fallar en silencio. */
 function encodeWAV(samples, sampleRate) {
   const buffer = new ArrayBuffer(44 + samples.length * 2);
   const view = new DataView(buffer);
@@ -904,7 +918,7 @@ function encodeWAV(samples, sampleRate) {
 }
 
 function PronunciationAnalysis({ referenceText, allowAnalysis }) {
-  const [status, setStatus] = useState("idle"); // idle | recording | analyzing | done | error
+  const [status, setStatus] = useState("idle");
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const streamRef = useRef(null);
@@ -1046,9 +1060,9 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
   const [matchedCount, setMatchedCount] = useState(0);
   const [micError, setMicError] = useState("");
   const recognitionRef = useRef(null);
-  const recordingRef = useRef(false); // evita cerrar sobre un `status` viejo dentro de los callbacks
+  const recordingRef = useRef(false);
   const startTimeRef = useRef(0);
-  const timestampsRef = useRef([]); // ms desde el inicio en que se reconoció cada palabra nueva
+  const timestampsRef = useRef([]);
 
   const options = READING_TEXTS.filter((t) => t.level === level && t.topic === topic);
   const words = selected ? selected.text.split(/\s+/) : [];
@@ -1074,7 +1088,7 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
     startTimeRef.current = Date.now();
     timestampsRef.current = [];
 
-    if (!SpeechRecognitionAPI) return; // sin voz en vivo, solo el temporizador
+    if (!SpeechRecognitionAPI) return;
 
     const recognition = new SpeechRecognitionAPI();
     recognition.lang = "es-ES";
@@ -1095,7 +1109,6 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
       });
     };
     recognition.onerror = (e) => {
-      // Antes esto no hacía nada y el error quedaba invisible para el usuario.
       if (errorMessages[e.error]) setMicError(errorMessages[e.error]);
       if (e.error === "not-allowed" || e.error === "service-not-allowed" || e.error === "audio-capture") {
         recordingRef.current = false;
@@ -1103,8 +1116,6 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
       }
     };
     recognition.onend = () => {
-      // Algunos navegadores cortan el reconocimiento solo tras unos segundos;
-      // si el usuario sigue "grabando", lo reiniciamos automáticamente.
       if (recordingRef.current) {
         try { recognition.start(); } catch (e) {}
       }
@@ -1119,13 +1130,11 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
     }
   };
 
-  // Métricas de fluidez calculadas de verdad a partir de los tiempos entre
-  // palabras reconocidas — no es pronunciación, pero sí es una señal real.
   const computeFluency = () => {
     const ts = timestampsRef.current;
     let pauseCount = 0;
     for (let i = 1; i < ts.length; i++) {
-      if (ts[i] - ts[i - 1] > 1200) pauseCount++; // hueco > 1.2s entre palabras
+      if (ts[i] - ts[i - 1] > 1200) pauseCount++;
     }
     const minutes = seconds / 60;
     const wordsPerMinute = minutes > 0 && matchedCount > 0 ? Math.round(matchedCount / minutes) : 0;
@@ -1276,7 +1285,6 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
   );
 }
 
-/* ---------------------- Modo conversación ---------------------- */
 const CONVERSATION_TOPICS = {
   cotidiano: {
     label: "Charla cotidiana",
@@ -1313,7 +1321,7 @@ function ConversationPage({ uid, onSaved, goBack }) {
   const [answers, setAnswers] = useState([]);
   const [listening, setListening] = useState(false);
   const [draft, setDraft] = useState("");
-  const [phase, setPhase] = useState("chat"); // chat | rating | done
+  const [phase, setPhase] = useState("chat");
   const [ratings, setRatings] = useState({ comodidad: 0, confianza: 0, participacion: 0 });
   const secondsRef = useRef(0);
   const recognitionRef = useRef(null);
@@ -1479,12 +1487,10 @@ function ConversationPage({ uid, onSaved, goBack }) {
   );
 }
 
-/* ---------------------- Dashboard / navegación principal ---------------------- */
 function categoryLabel(category) {
   return { breathing: "Respiración", reading: "Lectura en voz alta", conversation: "Conversación", articulation: "Sonidos y articulación" }[category] || category;
 }
 
-/* ---------------------- Cuestionario inicial (autoreporte, no diagnóstico) ---------------------- */
 function OnboardingQuestionnaire({ uid, onDone }) {
   const [selected, setSelected] = useState([]);
   const [skipReason, setSkipReason] = useState(false);
@@ -1537,7 +1543,6 @@ function OnboardingQuestionnaire({ uid, onDone }) {
   );
 }
 
-/* ---------------------- Sonidos y articulación ---------------------- */
 function ArticulationStage({ target, onDone, label }) {
   const [status, setStatus] = useState("idle");
   const [matchedCount, setMatchedCount] = useState(0);
@@ -1604,7 +1609,6 @@ function ArticulationStage({ target, onDone, label }) {
   );
 }
 
-/* ---------------------- Runner: niveles de respiración ---------------------- */
 function BreathingLevelRunner({ level, onFinish, onExit }) {
   const phases = [
     { key: "inhale", label: "INHALA", seconds: 4 },
@@ -1666,7 +1670,6 @@ function BreathingLevelRunner({ level, onFinish, onExit }) {
       });
     }, 1000);
     return () => clearInterval(t);
-    // eslint-disable-next-line
   }, [running, phaseIdx]);
 
   const phase = phases[phaseIdx];
@@ -1704,7 +1707,6 @@ function BreathingLevelRunner({ level, onFinish, onExit }) {
   );
 }
 
-/* ---------------------- Runner: niveles de lectura y articulación (comparten motor) ---------------------- */
 function TextLevelRunner({ level, onFinish }) {
   const [partIdx, setPartIdx] = useState(0);
   const [totals, setTotals] = useState({ matched: 0, total: 0 });
@@ -1732,7 +1734,6 @@ function TextLevelRunner({ level, onFinish }) {
   );
 }
 
-/* ---------------------- Runner: niveles de conversación ---------------------- */
 function ConversationLevelRunner({ level, onFinish }) {
   const [qIndex, setQIndex] = useState(0);
   const [answeredCount, setAnsweredCount] = useState(0);
@@ -1795,7 +1796,45 @@ function ConversationLevelRunner({ level, onFinish }) {
   );
 }
 
-/* ---------------------- Camino de niveles (estilo Duolingo) ---------------------- */
+function CustomPracticeRunner({ uid, steps, config, onFinish, onExit }) {
+  const [idx, setIdx] = useState(0);
+  const [elapsedTotal, setElapsedTotal] = useState(0);
+  const step = steps[idx];
+
+  const advance = async (elapsed) => {
+    const newTotal = elapsedTotal + (elapsed || 0);
+    if (idx + 1 < steps.length) {
+      setElapsedTotal(newTotal);
+      setIdx(idx + 1);
+    } else {
+      await saveSession(uid, {
+        category: "custom", durationSeconds: newTotal || config.duration * 60,
+        extra: { activities: config.activities, difficulty: config.difficulty, theme: config.theme, viaBuilder: true },
+      });
+      onFinish(newTotal);
+    }
+  };
+
+  return (
+    <div style={{ maxWidth: 560, margin: "0 auto", padding: "36px 24px 100px" }}>
+      <button onClick={onExit} style={backLinkStyle}>← Salir de la práctica</button>
+      <p style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginBottom: 6 }}>
+        Paso {idx + 1} de {steps.length}
+      </p>
+      <h1 style={{ fontFamily: display, fontSize: 22, color: colors.ink, marginBottom: 18 }}>{step.label}</h1>
+      {step.type === "breathing" && (
+        <BreathingLevelRunner level={step.level} onFinish={(f, e) => advance(e)} onExit={() => advance(0)} />
+      )}
+      {(step.type === "reading" || step.type === "articulation") && (
+        <TextLevelRunner level={step.level} onFinish={(f, e) => advance(e)} />
+      )}
+      {step.type === "conversation" && (
+        <ConversationLevelRunner level={step.level} onFinish={(f, e) => advance(e)} />
+      )}
+    </div>
+  );
+}
+
 function LevelPathList({ levels, progress, onSelect }) {
   const completedIds = Object.keys(progress).map(Number);
   const nextAvailable = completedIds.length === 0 ? 1 : Math.min(levels.length, Math.max(...completedIds) + 1);
@@ -1888,7 +1927,6 @@ function LevelPath({ areaLabel, levels, progress, onSelect, goBack }) {
   );
 }
 
-/* ---------------------- Página de niveles por área ---------------------- */
 function LevelsPage({ uid, areaKey, goBack, onSaved }) {
   const area = LEVEL_AREAS[areaKey];
   const [progress, setProgress] = useState(null);
@@ -1938,7 +1976,6 @@ function LevelsPage({ uid, areaKey, goBack, onSaved }) {
   return <LevelPath areaLabel={area.label} levels={area.levels} progress={progress} onSelect={setActiveLevel} goBack={goBack} />;
 }
 
-/* ---------------------- Inicio: curso abierto + selector de cursos ---------------------- */
 function CourseDropdown({ areaKey, onChange, progressSummary }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -2003,10 +2040,6 @@ function CourseDropdown({ areaKey, onChange, progressSummary }) {
   );
 }
 
-// Página principal después de iniciar sesión: abre directo en el curso más
-// avanzado (el que tenga más niveles completados; si nadie ha completado
-// nada, empieza por respiración), con un dropdown arriba para cambiar de
-// curso sin pasar por "Mis cursos".
 function CourseHome({ uid, navigate, xp }) {
   const [progressByArea, setProgressByArea] = useState(null);
   const [areaKey, setAreaKey] = useState(null);
@@ -2093,7 +2126,6 @@ function CourseHome({ uid, navigate, xp }) {
   );
 }
 
-/* ---------------------- Selector de las 4 áreas con niveles ---------------------- */
 function LevelAreasHome({ uid, navigate }) {
   const [summaries, setSummaries] = useState(null);
 
@@ -2182,7 +2214,7 @@ function ArticulationPage({ uid, onSaved, goBack }) {
         category: "articulation", durationSeconds: 0,
         extra: { sound, wordsMatched: totals.matched + matched, totalWords: totals.total + total },
       }).then(onSaved);
-      setStageIdx(stages.length); // pantalla final
+      setStageIdx(stages.length);
     }
   };
 
@@ -2250,7 +2282,6 @@ function recommendationsFor(focusAreas) {
   return [...pages].map((p) => PAGE_INFO[p]).filter(Boolean);
 }
 
-/* ---------------------- Catálogo de cursos (reutilizable) ---------------------- */
 const COURSES = {
   breathing: { image: "fotos/respira.png", title: "Respiración", desc: "Aprende técnicas de respiración y control.", practicePage: "breathing" },
   reading: { image: "fotos/libro.png", title: "Lectura", desc: "Practica lectura y fluidez a tu ritmo.", practicePage: "reading" },
@@ -2297,7 +2328,6 @@ function CourseCatalog({ courseKeys, onSelect, progress }) {
   );
 }
 
-/* ---------------------- Detalle de un curso: Practicar vs Niveles ---------------------- */
 function CourseDetailPage({ areaKey, uid, navigate, goBack }) {
   const c = COURSES[areaKey];
   const [progress, setProgress] = useState(null);
@@ -2357,7 +2387,6 @@ function CourseDetailPage({ areaKey, uid, navigate, goBack }) {
   );
 }
 
-/* ---------------------- Mis cursos ---------------------- */
 function MyCoursesPage({ uid, navigate }) {
   const [progress, setProgress] = useState(null);
 
@@ -2391,7 +2420,6 @@ function MyCoursesPage({ uid, navigate }) {
   );
 }
 
-/* ---------------------- Mi progreso (estadísticas generales) ---------------------- */
 function MyProgressPage({ stats, xp }) {
   const level = levelFor(xp || 0);
   const recent = stats.sessions.slice(0, 8);
@@ -2440,7 +2468,6 @@ function MyProgressPage({ stats, xp }) {
   );
 }
 
-/* ---------------------- Ranking (opcional, por XP de constancia) ---------------------- */
 function LeaderboardPage({ uid }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState("");
@@ -2506,8 +2533,6 @@ function AchievementsPage({ stats }) {
   );
 }
 
-/* ---------------------- App con sesión iniciada ---------------------- */
-/* ---------------------- Perfil y configuración ---------------------- */
 function ProfilePage({ uid, profile, onSaved }) {
   const [name, setName] = useState(profile.name || "");
   const [nameSaved, setNameSaved] = useState(false);
@@ -2669,6 +2694,7 @@ function TopBar({ page, navigate, onLogout }) {
   const items = [
   ["dashboard", "Inicio", "fotos/Inicio.png"],
   ["mis-cursos", "Mis cursos", "fotos/Mis_cursos.png"],
+  ["builder", "Crear mi práctica", "fotos/meditar.png"],
   ["levels", "Niveles", "fotos/Niveles.png"],
   ["leaderboard", "Ranking", "fotos/Ranking.png"],
   ["achievements", "Logros", "fotos/Logros.png"],
@@ -2750,6 +2776,242 @@ function TopBar({ page, navigate, onLogout }) {
   );
 }
 
+/* ---------------------- Constructor de prácticas personalizadas ---------------------- */
+function PracticeBuilderPage({ uid, onSaved }) {
+  const [phase, setPhase] = useState("routines");
+  const [routines, setRoutines] = useState(null);
+  const [activities, setActivities] = useState([]);
+  const [duration, setDuration] = useState(5);
+  const [customDuration, setCustomDuration] = useState("");
+  const [difficulty, setDifficulty] = useState("principiante");
+  const [theme, setTheme] = useState("Vida cotidiana");
+  const [steps, setSteps] = useState([]);
+  const [routineName, setRoutineName] = useState("");
+
+  const loadRoutines = async () => {
+    const snap = await db.collection("users").doc(uid).collection("routines").orderBy("createdAt", "desc").get();
+    setRoutines(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  };
+  useEffect(() => { loadRoutines(); }, []);
+
+  const toggleActivity = (key) => setActivities((a) => (a.includes(key) ? a.filter((x) => x !== key) : [...a, key]));
+  const effectiveDuration = duration === "custom" ? (parseInt(customDuration, 10) || 5) : duration;
+
+  const generate = () => {
+    setSteps(buildCustomSteps({ activities, duration: effectiveDuration, difficulty, theme }));
+    setPhase("preview");
+  };
+
+  const saveRoutine = async () => {
+    const config = {
+      name: routineName || `Mi práctica de ${theme.toLowerCase()}`,
+      activities, duration: effectiveDuration, difficulty, theme,
+    };
+    await db.collection("users").doc(uid).collection("routines").add({
+      ...config, createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    await loadRoutines();
+  };
+
+  const startFromRoutine = (r) => {
+    setActivities(r.activities); setDuration(r.duration); setDifficulty(r.difficulty); setTheme(r.theme);
+    setSteps(buildCustomSteps(r));
+    setPhase("preview");
+  };
+
+  const deleteRoutine = async (id) => {
+    await db.collection("users").doc(uid).collection("routines").doc(id).delete();
+    await loadRoutines();
+  };
+
+  if (phase === "running") {
+    return (
+      <CustomPracticeRunner
+        uid={uid}
+        steps={steps}
+        config={{ activities, duration: effectiveDuration, difficulty, theme }}
+        onExit={() => setPhase("preview")}
+        onFinish={() => { setPhase("done"); onSaved(); }}
+      />
+    );
+  }
+
+  if (phase === "done") {
+    return (
+      <div style={{ maxWidth: 480, margin: "0 auto", padding: "60px 24px", textAlign: "center" }}>
+        <div style={{ fontSize: 44, marginBottom: 10 }}>🎉</div>
+        <h1 style={{ fontFamily: display, fontSize: 26, color: colors.ink, marginBottom: 8 }}>¡Práctica completada!</h1>
+        <p style={{ fontFamily: font, color: colors.inkSoft, marginBottom: 26 }}>Quedó guardada en tu progreso.</p>
+        <PrimaryButton onClick={() => setPhase("routines")}>Volver</PrimaryButton>
+      </div>
+    );
+  }
+
+  if (phase === "preview") {
+    return (
+      <div style={{ maxWidth: 560, margin: "0 auto", padding: "36px 24px 100px" }}>
+        <button onClick={() => setPhase("build")} style={backLinkStyle}>← Editar</button>
+        <Pill>Personalizada</Pill>
+        <h1 style={{ fontFamily: display, fontSize: 26, color: colors.ink, margin: "10px 0 6px" }}>Tu práctica está lista</h1>
+        <p style={{ fontFamily: font, fontSize: 14, color: colors.inkSoft, marginBottom: 22 }}>
+          Una sesión de {effectiveDuration} min sobre {theme.toLowerCase()} · {BUILDER_DIFFICULTIES.find((d) => d.id === difficulty).label}
+        </p>
+        <Card style={{ marginBottom: 20 }}>
+          {steps.map((s, i) => (
+            <div key={i} style={{
+              display: "flex", justifyContent: "space-between", padding: "10px 0",
+              borderBottom: i < steps.length - 1 ? `1px solid ${colors.border}` : "none",
+            }}>
+              <div>
+                <div style={{ fontFamily: font, fontWeight: 700, fontSize: 14, color: colors.ink }}>{ACTIVITY_LABELS[s.key]}</div>
+                <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft }}>{s.label}</div>
+              </div>
+              <div style={{ fontFamily: mono, fontSize: 12.5, color: colors.teal, alignSelf: "center" }}>{Math.round(s.minutes)} min</div>
+            </div>
+          ))}
+        </Card>
+        <p style={{ fontFamily: font, fontSize: 11.5, color: colors.inkSoft, marginBottom: 16 }}>
+          Esta vista es un ejemplo de tu práctica — todavía no has iniciado la sesión.
+        </p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <PrimaryButton onClick={() => setPhase("running")}>Comenzar práctica</PrimaryButton>
+          <GhostButton onClick={saveRoutine}>Guardar esta rutina</GhostButton>
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === "build") {
+    return (
+      <div style={{ maxWidth: 620, margin: "0 auto", padding: "36px 24px 100px" }}>
+        <button onClick={() => setPhase("routines")} style={backLinkStyle}>← Volver</button>
+        <h1 style={{ fontFamily: display, fontSize: 26, color: colors.ink, marginBottom: 4 }}>Crear mi práctica</h1>
+        <p style={{ fontFamily: font, fontSize: 13.5, color: colors.inkSoft, marginBottom: 24 }}>Diseña una sesión adaptada a tus preferencias.</p>
+
+        <Card style={{ marginBottom: 16 }}>
+          <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 10 }}>A. Elige las actividades</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {BUILDER_ACTIVITIES.map((a) => (
+              <button key={a.key} onClick={() => toggleActivity(a.key)} style={{
+                display: "flex", alignItems: "center", gap: 10, textAlign: "left", padding: 12, borderRadius: 14,
+                border: `1.5px solid ${activities.includes(a.key) ? colors.teal : colors.border}`,
+                background: activities.includes(a.key) ? colors.mintSoft : "#fff", cursor: "pointer",
+              }}>
+                <img src={a.image} alt={a.label} style={{ width: 28, height: 28, objectFit: "contain", flexShrink: 0 }} />
+                <div>
+                  <div style={{ fontFamily: font, fontWeight: 700, fontSize: 13.5, color: colors.ink }}>{a.label}</div>
+                  <div style={{ fontFamily: font, fontSize: 11.5, color: colors.inkSoft }}>{a.desc}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+          <div style={{ fontFamily: mono, fontSize: 11.5, color: colors.inkSoft, marginTop: 10 }}>
+            {activities.length} actividad{activities.length === 1 ? "" : "es"} seleccionada{activities.length === 1 ? "" : "s"}
+          </div>
+        </Card>
+
+        <Card style={{ marginBottom: 16 }}>
+          <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 10 }}>B. Elige duración</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {BUILDER_DURATIONS.map((d) => (
+              <button key={d} onClick={() => setDuration(d)} style={{
+                padding: "9px 16px", borderRadius: 999, cursor: "pointer",
+                border: `1.5px solid ${duration === d ? colors.teal : colors.border}`,
+                background: duration === d ? colors.teal : "#fff", color: duration === d ? "#fff" : colors.ink,
+                fontFamily: font, fontWeight: 600, fontSize: 13.5,
+              }}>{d} min</button>
+            ))}
+            <button onClick={() => setDuration("custom")} style={{
+              padding: "9px 16px", borderRadius: 999, cursor: "pointer",
+              border: `1.5px solid ${duration === "custom" ? colors.teal : colors.border}`,
+              background: duration === "custom" ? colors.teal : "#fff", color: duration === "custom" ? "#fff" : colors.ink,
+              fontFamily: font, fontWeight: 600, fontSize: 13.5,
+            }}>Personalizada</button>
+          </div>
+          {duration === "custom" && (
+            <input type="number" min="1" value={customDuration} onChange={(e) => setCustomDuration(e.target.value)}
+              placeholder="Minutos" style={{ ...inputStyle, marginTop: 10, maxWidth: 140 }} />
+          )}
+        </Card>
+
+        <Card style={{ marginBottom: 16 }}>
+          <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 10 }}>C. Elige dificultad</div>
+          <p style={{ fontFamily: font, fontSize: 11.5, color: colors.inkSoft, marginBottom: 10 }}>
+            Se refiere a la complejidad del ejercicio, no a tu capacidad.
+          </p>
+          <div style={{ display: "grid", gap: 8 }}>
+            {BUILDER_DIFFICULTIES.map((d) => (
+              <button key={d.id} onClick={() => setDifficulty(d.id)} style={{
+                textAlign: "left", padding: 12, borderRadius: 14, cursor: "pointer",
+                border: `1.5px solid ${difficulty === d.id ? colors.teal : colors.border}`,
+                background: difficulty === d.id ? colors.mintSoft : "#fff",
+              }}>
+                <div style={{ fontFamily: font, fontWeight: 700, fontSize: 13.5, color: colors.ink }}>{d.label}</div>
+                <div style={{ fontFamily: font, fontSize: 12, color: colors.inkSoft }}>{d.desc}</div>
+              </button>
+            ))}
+          </div>
+        </Card>
+
+        <Card style={{ marginBottom: 20 }}>
+          <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 10 }}>D. Elige un tema</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {BUILDER_THEMES.map((t) => (
+              <button key={t} onClick={() => setTheme(t)} style={{
+                padding: "9px 16px", borderRadius: 999, cursor: "pointer",
+                border: `1.5px solid ${theme === t ? colors.teal : colors.border}`,
+                background: theme === t ? colors.mintSoft : "#fff", color: theme === t ? colors.teal : colors.ink,
+                fontFamily: font, fontWeight: 600, fontSize: 13.5,
+              }}>{t}</button>
+            ))}
+          </div>
+        </Card>
+
+        <PrimaryButton disabled={activities.length === 0} onClick={generate} style={{ width: "100%", justifyContent: "center" }}>
+          Ver diseño de la práctica
+        </PrimaryButton>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: 640, margin: "0 auto", padding: "36px 24px 100px" }}>
+      <h1 style={{ fontFamily: display, fontSize: 28, color: colors.ink, marginBottom: 6 }}>Crear mi práctica</h1>
+      <p style={{ fontFamily: font, fontSize: 13.5, color: colors.inkSoft, marginBottom: 24 }}>
+        Diseña una sesión adaptada a tus preferencias, o repite una rutina guardada.
+      </p>
+      <PrimaryButton
+        onClick={() => { setActivities([]); setDuration(5); setDifficulty("principiante"); setTheme("Vida cotidiana"); setRoutineName(""); setPhase("build"); }}
+        style={{ marginBottom: 24 }}
+      >
+        + Nueva práctica
+      </PrimaryButton>
+      {routines === null ? (
+        <p style={{ fontFamily: font, color: colors.inkSoft }}>Cargando tus rutinas…</p>
+      ) : routines.length === 0 ? (
+        <Note>Todavía no guardaste ninguna rutina personalizada.</Note>
+      ) : (
+        <div style={{ display: "grid", gap: 10 }}>
+          {routines.map((r) => (
+            <Card key={r.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontFamily: font, fontWeight: 700, fontSize: 14.5, color: colors.ink }}>{r.name}</div>
+                <div style={{ fontFamily: mono, fontSize: 11.5, color: colors.inkSoft, marginTop: 4 }}>
+                  {r.duration} min · {BUILDER_DIFFICULTIES.find((d) => d.id === r.difficulty) && BUILDER_DIFFICULTIES.find((d) => d.id === r.difficulty).label} · {r.activities.map((a) => ACTIVITY_LABELS[a]).join(", ")}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <GhostButton onClick={() => startFromRoutine(r)}>Usar</GhostButton>
+                <GhostButton onClick={() => deleteRoutine(r.id)} style={{ color: colors.danger, borderColor: colors.danger }}>Eliminar</GhostButton>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LoggedInApp({ authUser }) {
   const [page, setPage] = useState("dashboard");
   const [profile, setProfile] = useState(null);
@@ -2779,6 +3041,7 @@ function LoggedInApp({ authUser }) {
       <TopBar page={page} navigate={setPage} onLogout={() => auth.signOut()} />
       {page === "dashboard" && <CourseHome uid={authUser.uid} navigate={setPage} xp={profile.xp || 0} />}
       {page === "mis-cursos" && <MyCoursesPage uid={authUser.uid} navigate={setPage} />}
+      {page === "builder" && <PracticeBuilderPage uid={authUser.uid} onSaved={refresh} />}
       {page === "curso-breathing" && <CourseDetailPage areaKey="breathing" uid={authUser.uid} navigate={setPage} goBack={() => setPage("mis-cursos")} />}
       {page === "curso-reading" && <CourseDetailPage areaKey="reading" uid={authUser.uid} navigate={setPage} goBack={() => setPage("mis-cursos")} />}
       {page === "curso-conversation" && <CourseDetailPage areaKey="conversation" uid={authUser.uid} navigate={setPage} goBack={() => setPage("mis-cursos")} />}
@@ -2800,9 +3063,8 @@ function LoggedInApp({ authUser }) {
   );
 }
 
-/* ---------------------- Raíz ---------------------- */
 function Root() {
-  const [authUser, setAuthUser] = useState(undefined); // undefined = cargando, null = sin sesión
+  const [authUser, setAuthUser] = useState(undefined);
 
   useEffect(() => {
     if (!firebaseOk) { setAuthUser(null); return; }
@@ -2827,9 +3089,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(<Root />);
 </script>
 
 <script>
-// Transformamos el bloque de arriba a mano, forzando el modo "clásico" de
-// JSX (React.createElement) en vez del modo "automático" (que usa `import`
-// y no funciona dentro de un <script> normal en el navegador).
 (function () {
   const source = document.getElementById("app-source").textContent;
   const output = Babel.transform(source, {
