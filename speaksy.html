@@ -1492,7 +1492,7 @@ function ConversationPage({ uid, onSaved, goBack }) {
 }
 
 function categoryLabel(category) {
-  return { breathing: "Respiración", reading: "Lectura en voz alta", conversation: "Conversación", articulation: "Sonidos y articulación" }[category] || category;
+  return { breathing: "Respiración", reading: "Lectura en voz alta", conversation: "Conversación", articulation: "Sonidos y articulación", custom: "Mi práctica" }[category] || category;
 }
 
 function OnboardingQuestionnaire({ uid, onDone }) {
@@ -1886,46 +1886,45 @@ function LevelPathList({ levels, progress, onSelect }) {
                 color: done ? "#fff" : current ? "#8A5A16" : colors.inkSoft,
               }}>
                 {done ? "✓" : locked ? (
-  <img
-    src="fotos/candado.png"
-    alt="Bloqueado"
-    style={{
-      width: 20,
-      height: 20,
-      objectFit: "contain",
-    }}
-  />
-) : lvl.id}
+                  <img
+                    src="fotos/candado.png"
+                    alt="Bloqueado"
+                    style={{
+                      width: 20,
+                      height: 20,
+                      objectFit: "contain",
+                    }}
+                  />
+                ) : lvl.id}
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: font, fontWeight: 700, fontSize: 14.5, color: colors.ink }}>{lvl.title}</div>
                 <div style={{ fontFamily: font, fontSize: 12, color: colors.inkSoft }}>{lvl.desc}</div>
                 {done && (
                   <div style={{ fontFamily: mono, fontSize: 12, color: colors.amber, marginTop: 4 }}>
-                   <div style={{
-  display: "flex",
-  alignItems: "center",
-  gap: 3,
-  marginTop: 4,
-}}>
-  {Array.from({ length: 3 }).map((_, index) => (
-    <img
-      key={index}
-      src="fotos/Logros.png"
-      alt="Estrella"
-      style={{
-        width: 16,
-        height: 16,
-        objectFit: "contain",
-        opacity: index < done.stars ? 1 : 0.25,
-      }}
-    />
-  ))}
-  <span style={{ marginLeft: 3 }}>
-    · {done.xp} XP
-    
-  </span>
-</div>
+                    <div style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 3,
+                      marginTop: 4,
+                    }}>
+                      {Array.from({ length: 3 }).map((_, index) => (
+                        <img
+                          key={index}
+                          src="fotos/Logros.png"
+                          alt="Estrella"
+                          style={{
+                            width: 16,
+                            height: 16,
+                            objectFit: "contain",
+                            opacity: index < done.stars ? 1 : 0.25,
+                          }}
+                        />
+                      ))}
+                      <span style={{ marginLeft: 3 }}>
+                        · {done.xp} XP
+                      </span>
+                    </div>
                   </div>
                 )}
               </div>
@@ -2165,52 +2164,52 @@ function LevelAreasHome({ uid, navigate }) {
           const done = summaries ? Object.keys(summaries[key] || {}).length : 0;
           return (
             <button
-  key={key}
-  onClick={() => navigate("levels-" + key)}
-  style={{
-    display: "flex",
-    alignItems: "center",
-    gap: 14,
-    width: "100%",
-    padding: "18px 20px",
-    borderRadius: 16,
-    border: `1.5px solid ${colors.border}`,
-    background: "#fff",
-    cursor: "pointer",
-    fontFamily: font,
-    textAlign: "left",
-  }}
->
-  <img
-    src={area.image}
-    alt={area.label}
-    style={{
-      width: 45,
-      height: 45,
-      objectFit: "contain",
-      flexShrink: 0,
-    }}
-  />
+              key={key}
+              onClick={() => navigate("levels-" + key)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 14,
+                width: "100%",
+                padding: "18px 20px",
+                borderRadius: 16,
+                border: `1.5px solid ${colors.border}`,
+                background: "#fff",
+                cursor: "pointer",
+                fontFamily: font,
+                textAlign: "left",
+              }}
+            >
+              <img
+                src={area.image}
+                alt={area.label}
+                style={{
+                  width: 45,
+                  height: 45,
+                  objectFit: "contain",
+                  flexShrink: 0,
+                }}
+              />
 
-  <div style={{ flex: 1 }}>
-    <div style={{
-      fontWeight: 700,
-      fontSize: 15.5,
-      color: colors.ink
-    }}>
-      {area.label}
-    </div>
+              <div style={{ flex: 1 }}>
+                <div style={{
+                  fontWeight: 700,
+                  fontSize: 15.5,
+                  color: colors.ink
+                }}>
+                  {area.label}
+                </div>
 
-    <div style={{
-      fontFamily: mono,
-      fontSize: 12.5,
-      color: colors.inkSoft,
-      marginTop: 4
-    }}>
-      {summaries ? `${done}/${area.levels.length} niveles` : "…"}
-    </div>
-  </div>
-</button>
+                <div style={{
+                  fontFamily: mono,
+                  fontSize: 12.5,
+                  color: colors.inkSoft,
+                  marginTop: 4
+                }}>
+                  {summaries ? `${done}/${area.levels.length} niveles` : "…"}
+                </div>
+              </div>
+            </button>
           );
         })}
       </div>
@@ -2222,6 +2221,7 @@ function ArticulationPage({ uid, onSaved, goBack }) {
   const [sound, setSound] = useState(null);
   const [stageIdx, setStageIdx] = useState(0);
   const [totals, setTotals] = useState({ matched: 0, total: 0 });
+  const startTimeRef = useRef(Date.now()); // NUEVO: para medir cuánto dura la práctica libre
   const stages = ["syllables", "words", "phrase"];
   const stageLabels = { syllables: "Sílabas", words: "Palabras", phrase: "Frase" };
 
@@ -2231,7 +2231,9 @@ function ArticulationPage({ uid, onSaved, goBack }) {
       setStageIdx(stageIdx + 1);
     } else {
       saveSession(uid, {
-        category: "articulation", durationSeconds: 0,
+        category: "articulation",
+        // ANTES: durationSeconds: 0  (por eso no aparecía en las estadísticas)
+        durationSeconds: Math.max(1, Math.round((Date.now() - startTimeRef.current) / 1000)),
         extra: { sound, wordsMatched: totals.matched + matched, totalWords: totals.total + total },
       }).then(onSaved);
       setStageIdx(stages.length);
@@ -2249,7 +2251,7 @@ function ArticulationPage({ uid, onSaved, goBack }) {
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           {Object.entries(SOUND_BANK).map(([id, s]) => (
-            <button key={id} onClick={() => { setSound(id); setStageIdx(0); setTotals({ matched: 0, total: 0 }); }} style={{
+            <button key={id} onClick={() => { setSound(id); setStageIdx(0); setTotals({ matched: 0, total: 0 }); startTimeRef.current = Date.now(); }} style={{
               textAlign: "left", padding: "14px", borderRadius: 14, border: `1.5px solid ${colors.border}`,
               background: "#fff", cursor: "pointer", fontFamily: font,
             }}>
@@ -2370,15 +2372,15 @@ function CourseDetailPage({ areaKey, uid, navigate, goBack }) {
       <div style={{ display: "grid", gap: 14, marginTop: 20 }}>
         <Card style={{ textAlign: "left", display: "flex", alignItems: "center", gap: 16 }}>
           <img
-  src="fotos/meditar.png"
-  alt="Practicar"
-  style={{
-    width: 45,
-    height: 45,
-    objectFit: "contain",
-    flexShrink: 0,
-  }}
-/>
+            src="fotos/meditar.png"
+            alt="Practicar"
+            style={{
+              width: 45,
+              height: 45,
+              objectFit: "contain",
+              flexShrink: 0,
+            }}
+          />
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: font, fontWeight: 700, fontSize: 15, color: colors.ink }}>Practicar</div>
             <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft }}>Práctica libre, sin desbloqueos ni secuencia. Repite cuando quieras.</div>
@@ -2387,15 +2389,15 @@ function CourseDetailPage({ areaKey, uid, navigate, goBack }) {
         </Card>
         <Card style={{ textAlign: "left", display: "flex", alignItems: "center", gap: 16 }}>
           <img
-  src="fotos/trofeo.png"
-  alt="Niveles"
-  style={{
-    width: 45,
-    height: 45,
-    objectFit: "contain",
-    flexShrink: 0,
-  }}
-/>
+            src="fotos/trofeo.png"
+            alt="Niveles"
+            style={{
+              width: 45,
+              height: 45,
+              objectFit: "contain",
+              flexShrink: 0,
+            }}
+          />
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: font, fontWeight: 700, fontSize: 15, color: colors.ink }}>Niveles</div>
             <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft }}>Progresión estructurada, con estrellas y XP. Completa un nivel para desbloquear el siguiente.</div>
@@ -2440,6 +2442,161 @@ function MyCoursesPage({ uid, navigate }) {
   );
 }
 
+/* ---------------------- Estadísticas: tiempo por actividad y por día (dentro de "Mi progreso") ---------------------- */
+const STAT_CATEGORIES = [
+  { key: "breathing", label: "Respiración", color: "#1F5C52" },
+  { key: "reading", label: "Lectura", color: "#E3A34E" },
+  { key: "articulation", label: "Articulación", color: "#5B8DB8" },
+  { key: "conversation", label: "Conversación", color: "#B3452F" },
+  { key: "custom", label: "Mi práctica", color: "#8A7FB8" },
+];
+const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+function formatTime(seconds) {
+  const s = Math.round(seconds || 0);
+  if (s < 60) return `${s} s`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  const rest = m % 60;
+  return rest ? `${h} h ${rest} min` : `${h} h`;
+}
+
+function startOfWeekMonday() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return d;
+}
+
+function StatsSection({ stats }) {
+  const [range, setRange] = useState("week"); // "week" | "all"
+
+  const weekStart = startOfWeekMonday();
+  const sessions = stats.sessions
+    .map((s) => ({ ...s, date: s.createdAt && s.createdAt.toDate ? s.createdAt.toDate() : null }))
+    .filter((s) => s.date && (range === "all" || s.date >= weekStart));
+
+  const byCategory = {};
+  STAT_CATEGORIES.forEach((c) => { byCategory[c.key] = 0; });
+  const byDay = WEEKDAYS.map(() => ({ total: 0, parts: {} }));
+
+  sessions.forEach((s) => {
+    const cat = byCategory[s.category] !== undefined ? s.category : "custom";
+    const secs = s.duration || 0;
+    byCategory[cat] += secs;
+    const idx = (s.date.getDay() + 6) % 7;
+    byDay[idx].total += secs;
+    byDay[idx].parts[cat] = (byDay[idx].parts[cat] || 0) + secs;
+  });
+
+  const totalSeconds = Object.values(byCategory).reduce((a, b) => a + b, 0);
+  const maxCat = Math.max(1, ...Object.values(byCategory));
+  const maxDay = Math.max(1, ...byDay.map((d) => d.total));
+  const bestDayIdx = byDay.some((d) => d.total > 0)
+    ? byDay.reduce((best, d, i) => (d.total > byDay[best].total ? i : best), 0)
+    : -1;
+  const todayIdx = (new Date().getDay() + 6) % 7;
+
+  const rangeBtn = (id, label) => (
+    <button key={id} onClick={() => setRange(id)} style={{
+      padding: "9px 16px", borderRadius: 999, cursor: "pointer",
+      border: `1.5px solid ${range === id ? colors.teal : colors.border}`,
+      background: range === id ? colors.teal : "#fff", color: range === id ? "#fff" : colors.ink,
+      fontFamily: font, fontWeight: 600, fontSize: 13.5,
+    }}>{label}</button>
+  );
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <h2 style={{ fontFamily: display, fontSize: 22, color: colors.ink, marginBottom: 6 }}>Estadísticas de práctica</h2>
+      <p style={{ fontFamily: font, fontSize: 13.5, color: colors.inkSoft, marginBottom: 16 }}>
+        Cuánto tiempo has practicado en cada actividad y en qué días de la semana.
+        Mide constancia, no qué tan bien hablas.
+      </p>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        {rangeBtn("week", "Esta semana")}
+        {rangeBtn("all", "Todo el tiempo")}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 14, marginBottom: 16 }}>
+        <StatCard label="Tiempo total" value={formatTime(totalSeconds)} />
+        <StatCard label="Sesiones" value={sessions.length} />
+        <StatCard label="Día con más práctica" value={bestDayIdx >= 0 ? WEEKDAYS[bestDayIdx] : "—"} />
+      </div>
+
+      {sessions.length === 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <Note>
+            {range === "week"
+              ? "Todavía no practicaste esta semana. Cuando lo hagas, aparecerá aquí."
+              : "Todavía no hay sesiones guardadas."}
+          </Note>
+        </div>
+      )}
+
+      <Card style={{ marginBottom: 16 }}>
+        <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 14 }}>Tiempo por actividad</div>
+        {STAT_CATEGORIES.map((c) => (
+          <div key={c.key} style={{ marginBottom: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontFamily: font, fontSize: 13.5, marginBottom: 6 }}>
+              <span style={{ color: colors.ink, fontWeight: 600 }}>{c.label}</span>
+              <span style={{ fontFamily: mono, color: colors.inkSoft }}>{formatTime(byCategory[c.key])}</span>
+            </div>
+            <div style={{ height: 10, borderRadius: 999, background: colors.mintSoft, overflow: "hidden" }}>
+              <div style={{
+                height: "100%", width: `${(byCategory[c.key] / maxCat) * 100}%`,
+                background: c.color, borderRadius: 999, transition: "width .4s ease",
+              }} />
+            </div>
+          </div>
+        ))}
+      </Card>
+
+      <Card>
+        <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 16 }}>Tiempo por día de la semana</div>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 190 }}>
+          {byDay.map((d, i) => (
+            <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%" }}>
+              <div style={{ fontFamily: mono, fontSize: 10.5, color: colors.inkSoft, marginBottom: 4, minHeight: 14 }}>
+                {d.total > 0 ? formatTime(d.total) : ""}
+              </div>
+              <div style={{
+                width: "100%", maxWidth: 44, height: `${(d.total / maxDay) * 140}px`, minHeight: d.total > 0 ? 4 : 0,
+                display: "flex", flexDirection: "column-reverse", borderRadius: 8, overflow: "hidden",
+              }}>
+                {STAT_CATEGORIES.filter((c) => d.parts[c.key] > 0).map((c) => (
+                  <div key={c.key} title={`${c.label}: ${formatTime(d.parts[c.key])}`}
+                    style={{ flex: d.parts[c.key], background: c.color }} />
+                ))}
+              </div>
+              <div style={{
+                marginTop: 8, fontFamily: font, fontSize: 12.5, fontWeight: i === todayIdx ? 700 : 500,
+                color: i === todayIdx ? colors.teal : colors.inkSoft,
+              }}>{WEEKDAYS[i]}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 18 }}>
+          {STAT_CATEGORIES.map((c) => (
+            <div key={c.key} style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: font, fontSize: 12, color: colors.inkSoft }}>
+              <span style={{ width: 10, height: 10, borderRadius: 3, background: c.color, display: "inline-block" }} />
+              {c.label}
+            </div>
+          ))}
+        </div>
+        {range === "all" && (
+          <p style={{ fontFamily: font, fontSize: 11.5, color: colors.inkSoft, marginTop: 12 }}>
+            En "Todo el tiempo", cada barra suma ese día de la semana en todas las semanas
+            (se consideran tus últimas 200 sesiones).
+          </p>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 function MyProgressPage({ stats, xp }) {
   const level = levelFor(xp || 0);
   const recent = stats.sessions.slice(0, 8);
@@ -2458,22 +2615,26 @@ function MyProgressPage({ stats, xp }) {
       </Card>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 24 }}>
-  <StatCard label="Sesiones realizadas" value={stats.totalSessions} />
-  <StatCard label="Minutos practicados" value={stats.totalMinutes} />
-  <StatCard
-    label="Días seguidos"
-    value={
-      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <img
-          src="fotos/fuego.png"
-          alt="Racha"
-          style={{ width: 50, height: 55 }}
+        <StatCard label="Sesiones realizadas" value={stats.totalSessions} />
+        <StatCard label="Minutos practicados" value={stats.totalMinutes} />
+        <StatCard
+          label="Días seguidos"
+          value={
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <img
+                src="fotos/fuego.png"
+                alt="Racha"
+                style={{ width: 50, height: 55 }}
+              />
+              {stats.streak}
+            </span>
+          }
         />
-        {stats.streak}
-      </span>
-    }
-  />
-</div>
+      </div>
+
+      {/* NUEVO: estadísticas por actividad y por día de la semana */}
+      <StatsSection stats={stats} />
+
       <Card>
         <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 12 }}>Actividad reciente</div>
         {recent.length === 0 && <p style={{ fontFamily: font, fontSize: 13.5, color: colors.inkSoft }}>Todavía no hay sesiones. ¡Empieza con una!</p>}
@@ -2712,15 +2873,15 @@ function TopBar({ page, navigate, onLogout }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
   const items = [
-  ["dashboard", "Inicio", "fotos/Inicio.png"],
-  ["mis-cursos", "Mis cursos", "fotos/Mis_cursos.png"],
-  ["builder", "Crear mi práctica", "fotos/meditar.png"],
-  ["levels", "Niveles", "fotos/Niveles.png"],
-  ["leaderboard", "Ranking", "fotos/Ranking.png"],
-  ["achievements", "Logros", "fotos/Logros.png"],
-  ["progress", "Mi progreso", "fotos/Mi progreso.png"],
-  ["profile", "Configuración", "fotos/Confi.png"],
-];
+    ["dashboard", "Inicio", "fotos/Inicio.png"],
+    ["mis-cursos", "Mis cursos", "fotos/Mis_cursos.png"],
+    ["builder", "Crear mi práctica", "fotos/meditar.png"],
+    ["levels", "Niveles", "fotos/Niveles.png"],
+    ["leaderboard", "Ranking", "fotos/Ranking.png"],
+    ["achievements", "Logros", "fotos/Logros.png"],
+    ["progress", "Mi progreso", "fotos/Mi progreso.png"],
+    ["profile", "Configuración", "fotos/Confi.png"],
+  ];
 
   useEffect(() => {
     if (!open) return;
@@ -2735,9 +2896,9 @@ function TopBar({ page, navigate, onLogout }) {
     <div style={{ position: "sticky", top: 0, zIndex: 30, borderBottom: `1px solid ${colors.border}`, background: colors.card }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 24px", fontFamily: font }}>
         <div onClick={() => go("dashboard")} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-  <img src="fotos/Logo.png" alt="Speaksy" style={{ height: 34, width: "auto", objectFit: "contain" }} />
-  <span style={{ fontFamily: display, fontWeight: 600, fontSize: 20, color: colors.ink }}>Speaksy</span>
-</div>
+          <img src="fotos/Logo.png" alt="Speaksy" style={{ height: 34, width: "auto", objectFit: "contain" }} />
+          <span style={{ fontFamily: display, fontWeight: 600, fontSize: 20, color: colors.ink }}>Speaksy</span>
+        </div>
         <div ref={menuRef} style={{ position: "relative" }}>
           <button onClick={() => setOpen((o) => !o)} style={{
             display: "flex", alignItems: "center", gap: 8, background: open ? colors.mintSoft : "transparent",
@@ -2752,37 +2913,37 @@ function TopBar({ page, navigate, onLogout }) {
               border: `1px solid ${colors.border}`, borderRadius: 14, boxShadow: "0 8px 24px rgba(22,48,43,.12)",
               minWidth: 210, overflow: "hidden", zIndex: 40,
             }}>
-             {items.map(([id, label, image]) => (
-  <button
-    key={id}
-    onClick={() => go(id)}
-    style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      width: "100%",
-      textAlign: "left",
-      padding: "12px 16px",
-      background: "transparent",
-      border: "none",
-      fontFamily: font,
-      fontSize: 13.5,
-      color: colors.ink,
-      cursor: "pointer",
-    }}
-  >
-    <img
-      src={image}
-      alt={label}
-      style={{
-        width: 24,
-        height: 24,
-        objectFit: "contain",
-      }}
-    />
-    <span>{label}</span>
-  </button>
-))}
+              {items.map(([id, label, image]) => (
+                <button
+                  key={id}
+                  onClick={() => go(id)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    width: "100%",
+                    textAlign: "left",
+                    padding: "12px 16px",
+                    background: "transparent",
+                    border: "none",
+                    fontFamily: font,
+                    fontSize: 13.5,
+                    color: colors.ink,
+                    cursor: "pointer",
+                  }}
+                >
+                  <img
+                    src={image}
+                    alt={label}
+                    style={{
+                      width: 24,
+                      height: 24,
+                      objectFit: "contain",
+                    }}
+                  />
+                  <span>{label}</span>
+                </button>
+              ))}
               <div style={{ borderTop: `1px solid ${colors.border}` }} />
               <button onClick={onLogout} style={{
                 display: "block", width: "100%", textAlign: "left", padding: "12px 16px",
