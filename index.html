@@ -194,13 +194,16 @@
   footer img{ height:28px; width:auto; opacity:.9; }
 
   @media (max-width: 860px){
-    .hero-grid{ grid-template-columns:1fr; }
+    .hero-grid{ grid-template-columns:minmax(0, 1fr); }
     .process-grid{ grid-template-columns:repeat(2,1fr); }
     .lede{ max-width:none; }
     .slide{ grid-template-columns:1fr; min-height:0; }
     .slide-text{ padding:30px 26px 22px; }
     .slide-visual{ padding:22px; order:-1; }
     .closing{ padding:50px 26px; }
+  }
+  @media (max-width: 400px){
+    .ring-stage{ padding:28px 18px; }
   }
   @media (prefers-reduced-motion: reduce){
     html{ scroll-behavior:auto; }

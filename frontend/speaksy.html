@@ -138,6 +138,12 @@ const APP_CSS = `
 @media (prefers-reduced-motion: reduce) {
   .speaksy-mic-dot, .speaksy-tip { animation: none; }
 }
+/* En pantallas angostas las cuadrículas de 3 columnas pasan a 2; si sobra
+   una tarjeta suelta al final, ocupa todo el ancho. */
+@media (max-width: 560px) {
+  .speaksy-grid-3 { grid-template-columns: repeat(2, 1fr) !important; }
+  .speaksy-grid-3 > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
 `;
 
 /* ---------------------- Preferencias del usuario ---------------------- */
@@ -1365,7 +1371,7 @@ function PronunciationAnalysis({ referenceText, allowAnalysis }) {
       {status === "error" && <Note tone="danger">{error}</Note>}
       {status === "done" && result && (
         <div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 12 }}>
+          <div className="speaksy-grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 12 }}>
             <StatCard label="Exactitud" value={Math.round(result.accuracy || 0)} />
             <StatCard label="Fluidez" value={Math.round(result.fluency || 0)} />
             <StatCard label="Completitud" value={Math.round(result.completeness || 0)} />
@@ -2738,7 +2744,7 @@ function CourseDetailPage({ areaKey, uid, navigate, goBack }) {
         </p>
       )}
       <div style={{ display: "grid", gap: 14, marginTop: 20 }}>
-        <Card style={{ textAlign: "left", display: "flex", alignItems: "center", gap: 16 }}>
+        <Card style={{ textAlign: "left", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 16 }}>
           <img
             src="fotos/meditar.png"
             alt="Practicar"
@@ -2749,13 +2755,13 @@ function CourseDetailPage({ areaKey, uid, navigate, goBack }) {
               flexShrink: 0,
             }}
           />
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: "1 1 160px", minWidth: 0 }}>
             <div style={{ fontFamily: font, fontWeight: 700, fontSize: 15, color: colors.ink }}>Practicar</div>
             <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft }}>Práctica libre, sin desbloqueos ni secuencia. Repite cuando quieras.</div>
           </div>
           <PrimaryButton onClick={() => navigate(c.practicePage)}>Practicar</PrimaryButton>
         </Card>
-        <Card style={{ textAlign: "left", display: "flex", alignItems: "center", gap: 16 }}>
+        <Card style={{ textAlign: "left", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 16 }}>
           <img
             src="fotos/trofeo.png"
             alt="Niveles"
@@ -2766,7 +2772,7 @@ function CourseDetailPage({ areaKey, uid, navigate, goBack }) {
               flexShrink: 0,
             }}
           />
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: "1 1 160px", minWidth: 0 }}>
             <div style={{ fontFamily: font, fontWeight: 700, fontSize: 15, color: colors.ink }}>Niveles</div>
             <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft }}>Progresión estructurada, con estrellas y XP. Completa un nivel para desbloquear el siguiente.</div>
           </div>
@@ -2986,7 +2992,7 @@ function MyProgressPage({ stats, xp }) {
         </div>
       </Card>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 24 }}>
+      <div className="speaksy-grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 24 }}>
         <StatCard label="Sesiones realizadas" value={stats.totalSessions} />
         <StatCard label="Minutos practicados" value={stats.totalMinutes} />
         <StatCard
@@ -3071,7 +3077,7 @@ function AchievementsPage({ stats }) {
   return (
     <div style={{ maxWidth: 800, margin: "0 auto", padding: "36px 24px 90px" }}>
       <h1 style={{ fontFamily: display, fontSize: 28, color: colors.ink, marginBottom: 24 }}>Logros</h1>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
+      <div className="speaksy-grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
         {ACHIEVEMENTS.map((a) => {
           const unlocked = stats.unlockedIds.has(a.id);
           return (
@@ -3603,7 +3609,7 @@ function TopBar({ page, navigate, onLogout }) {
             <div style={{
               position: "absolute", right: 0, top: "calc(100% + 8px)", background: "#fff",
               border: `1px solid ${colors.border}`, borderRadius: 14, boxShadow: "0 8px 24px rgba(22,48,43,.12)",
-              minWidth: 210, overflow: "hidden", zIndex: 40,
+              minWidth: 210, maxHeight: "calc(100vh - 90px)", overflowY: "auto", zIndex: 40,
             }}>
               {items.map(([id, label, image]) => (
                 <button
