@@ -403,11 +403,7 @@ const AUTH_CSS = `
 .au-page *{ box-sizing:border-box; }
 .au-nav{ display:flex; align-items:center; justify-content:space-between; padding:18px 28px; }
 .au-wordmark{ display:flex; align-items:center; gap:10px; font-family:'Fraunces',serif; font-size:20px; font-weight:600; }
-.au-dot{ width:32px; height:32px; border-radius:9px; background:var(--teal); position:relative; flex-shrink:0; }
-.au-dot::after{
-  content:""; position:absolute; inset:8px; border:2px solid var(--mint); border-radius:50%;
-  border-right-color:transparent; border-bottom-color:transparent; transform:rotate(45deg);
-}
+.au-wordmark img{ height:36px; width:auto; object-fit:contain; flex-shrink:0; }
 .au-nav-quiet{
   font-size:14px; font-weight:600; color:var(--ink-soft); text-decoration:none;
   border-bottom:1.5px solid var(--border); padding-bottom:2px;
@@ -707,7 +703,7 @@ function AuthScreen() {
       <style>{AUTH_CSS}</style>
 
       <nav className="au-nav">
-        <div className="au-wordmark"><span className="au-dot"></span>Speaksy</div>
+        <div className="au-wordmark"><img src="fotos/Logo.png" alt="" />Speaksy</div>
         <a className="au-nav-quiet" href="../index.html">Volver al inicio</a>
       </nav>
 
