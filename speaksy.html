@@ -3834,18 +3834,35 @@ function LoggedInApp({ authUser }) {
   const [profile, setProfile] = useState(null);
   const [stats, setStats] = useState({ sessions: [], totalSessions: 0, totalMinutes: 0, streak: 0, unlockedIds: new Set() });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
+  // El perfil se pide primero (es rápido) para conocer las preferencias,
+  // así la pantalla de carga ya puede mostrar tips mientras llegan las
+  // estadísticas.
   const refresh = async () => {
-    const doc = await db.collection("users").doc(authUser.uid).get();
-    setProfile(doc.data() || { email: authUser.email });
-    const s = await loadStats(authUser.uid);
-    setStats(s);
-    setLoading(false);
+    setLoadError("");
+    try {
+      const doc = await db.collection("users").doc(authUser.uid).get();
+      setProfile(doc.data() || { email: authUser.email });
+      const s = await loadStats(authUser.uid);
+      setStats(s);
+      setLoading(false);
+    } catch (e) {
+      console.error("Error cargando el progreso:", e);
+      setLoadError("No pudimos cargar tu progreso. Revisa tu conexión e inténtalo de nuevo.");
+    }
   };
 
   useEffect(() => { refresh(); }, []);
 
-  if (loading) return <div style={{ padding: 60, textAlign: "center", fontFamily: font, color: colors.inkSoft }}>Cargando tu progreso…</div>;
+  if (loading) {
+    return (
+      <PrefsContext.Provider value={profile ? prefsFromProfile(profile) : { showLoadingTips: false }}>
+        <style>{APP_CSS}</style>
+        <LoadingPanel label="Cargando tu progreso…" error={loadError} onRetry={refresh} />
+      </PrefsContext.Provider>
+    );
+  }
 
   if (!profile.focusAreas) {
     return <OnboardingQuestionnaire uid={authUser.uid} onDone={refresh} />;
