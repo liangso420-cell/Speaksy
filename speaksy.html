@@ -118,6 +118,189 @@ function StatCard({ label, value }) {
     </Card>
   );
 }
+function ToggleRow({ checked, onChange, title, children, disabled }) {
+  return (
+    <label style={{ display: "flex", gap: 12, alignItems: "flex-start", cursor: disabled ? "default" : "pointer" }}>
+      <input type="checkbox" checked={checked} onChange={onChange} disabled={disabled} style={{ marginTop: 3 }} />
+      <div>
+        <div style={{ fontFamily: font, fontWeight: 600, fontSize: 13.5, color: colors.ink }}>{title}</div>
+        <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginTop: 3, lineHeight: 1.5 }}>{children}</div>
+      </div>
+    </label>
+  );
+}
+
+const APP_CSS = `
+@keyframes speaksy-mic-pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+@keyframes speaksy-tip-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.speaksy-mic-dot { animation: speaksy-mic-pulse 1.6s ease-in-out infinite; }
+.speaksy-tip { animation: speaksy-tip-in .45s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .speaksy-mic-dot, .speaksy-tip { animation: none; }
+}
+`;
+
+/* ---------------------- Preferencias del usuario ---------------------- */
+// Viven en el documento del usuario en Firestore, igual que el resto del
+// perfil, y se reparten por la app con este contexto.
+const PrefsContext = React.createContext({ showLoadingTips: true });
+function prefsFromProfile(profile) {
+  return { showLoadingTips: profile.showLoadingTips !== false };
+}
+
+/* ---------------------- Indicador de micrófono activo ---------------------- */
+// Registro de todo lo que está usando el micrófono (reconocedores de voz y
+// grabaciones), para mostrar "Micrófono activo" en la barra superior.
+const micActivity = {
+  sources: new Set(), listeners: new Set(), shown: false, timer: null,
+  set(source, active) {
+    if (active) this.sources.add(source); else this.sources.delete(source);
+    clearTimeout(this.timer);
+    const notify = (v) => {
+      if (this.shown === v) return;
+      this.shown = v;
+      this.listeners.forEach((l) => l(v));
+    };
+    if (this.sources.size > 0) notify(true);
+    // El reconocimiento se reinicia solo tras cada pausa; esperamos un poco
+    // antes de apagar el indicador para que no parpadee.
+    else this.timer = setTimeout(() => notify(false), 400);
+  },
+};
+function useMicActive() {
+  const [active, setActive] = useState(micActivity.shown);
+  useEffect(() => {
+    micActivity.listeners.add(setActive);
+    setActive(micActivity.shown);
+    return () => { micActivity.listeners.delete(setActive); };
+  }, []);
+  return active;
+}
+function newRecognition() {
+  const recognition = new SpeechRecognitionAPI();
+  recognition.addEventListener("start", () => micActivity.set(recognition, true));
+  recognition.addEventListener("end", () => micActivity.set(recognition, false));
+  return recognition;
+}
+function stopStream(stream) {
+  stream.getTracks().forEach((t) => t.stop());
+  micActivity.set(stream, false);
+}
+function MicActiveBadge({ preview }) {
+  const active = useMicActive();
+  if (!active && !preview) return null;
+  return (
+    <span role={preview ? undefined : "status"} style={{
+      display: "inline-flex", alignItems: "center", gap: 7, background: "#FBEAE5", color: colors.danger,
+      border: `1.5px solid ${colors.danger}`, borderRadius: 999, padding: "6px 12px",
+      fontFamily: font, fontWeight: 600, fontSize: 12.5, whiteSpace: "nowrap",
+    }}>
+      <span className={preview ? "" : "speaksy-mic-dot"} style={{ width: 8, height: 8, borderRadius: "50%", background: colors.danger }} />
+      Micrófono activo
+    </span>
+  );
+}
+
+/* ---------------------- Tips durante las cargas ---------------------- */
+const TIP_CATEGORIES = {
+  comunicacion: { label: "Comunicación", icon: "fotos/Conv.png" },
+  practica: { label: "Práctica", icon: "fotos/libro.png" },
+  app: { label: "Uso de Speaksy", icon: "fotos/sonido.png" },
+};
+const LOADING_TIPS = [
+  { category: "comunicacion", text: "Si una palabra te cuesta, puedes explicarla con otras palabras. Lo importante es que tu idea llegue." },
+  { category: "comunicacion", text: "Si no recuerdas una palabra, prueba con un sinónimo o describe lo que quieres decir." },
+  { category: "comunicacion", text: "Si te bloqueas, puedes hacer una pausa y volver a intentarlo con calma." },
+  { category: "comunicacion", text: "No necesitas hablar perfecto para comunicarte. Cada conversación es una oportunidad para practicar." },
+  { category: "comunicacion", text: "Si una frase te resulta difícil, puedes dividirla en partes más pequeñas." },
+  { category: "comunicacion", text: "Si no te entienden a la primera, prueba a decir la misma idea de otra manera." },
+  { category: "comunicacion", text: "Concéntrate en el mensaje que quieres compartir, no solo en pronunciar cada palabra." },
+  { category: "comunicacion", text: "Puedes pedirle a la otra persona un momento para terminar tu idea. Es una petición válida." },
+  { category: "comunicacion", text: "Los gestos y los ejemplos también ayudan a que tu idea se entienda." },
+  { category: "practica", text: "Lee a tu ritmo natural. No hace falta alargar las palabras para practicar." },
+  { category: "practica", text: "Fíjate en las palabras que te resultan difíciles y practícalas cuando te sientas con ganas." },
+  { category: "practica", text: "Si te equivocas, sigue adelante. Después puedes volver a la palabra que te costó." },
+  { category: "practica", text: "Prueba a leer una frase completa y fíjate en cómo se conectan las palabras." },
+  { category: "practica", text: "Practicar un poco con frecuencia puede ayudarte a familiarizarte con las palabras y las conversaciones." },
+  { category: "practica", text: "Antes de empezar, una respiración tranquila puede ayudarte a arrancar con calma." },
+  { category: "practica", text: "El ritmo y las pausas describen una sesión puntual, no a ti. Úsalos solo como referencia." },
+  { category: "app", text: "Comprueba que el micrófono esté habilitado antes de una actividad de voz. Puedes revisarlo en Configuración." },
+  { category: "app", text: "Habla a una distancia cómoda del micrófono para que pueda captar tu voz." },
+  { category: "app", text: "Si el ruido dificulta que se reconozca tu voz, prueba en un lugar más tranquilo." },
+  { category: "app", text: "Si una palabra no se reconoce, repítela una vez de forma natural. Si sigue pasando, revisa el micrófono." },
+  { category: "app", text: "Cuando veas «Micrófono activo» en la barra de arriba, Speaksy está escuchando." },
+];
+
+// Baraja los tips y los va sacando de uno en uno, para que no se repitan
+// hasta haber mostrado todos.
+let tipQueue = [];
+let lastTip = null;
+function nextTip() {
+  if (LOADING_TIPS.length === 0) return null;
+  if (tipQueue.length === 0) {
+    tipQueue = LOADING_TIPS.slice();
+    for (let i = tipQueue.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [tipQueue[i], tipQueue[j]] = [tipQueue[j], tipQueue[i]];
+    }
+    const last = tipQueue.length - 1;
+    if (last > 0 && tipQueue[last] === lastTip) [tipQueue[0], tipQueue[last]] = [tipQueue[last], tipQueue[0]];
+  }
+  lastTip = tipQueue.pop();
+  return lastTip;
+}
+
+function TipCard({ tip }) {
+  const cat = TIP_CATEGORIES[tip.category] || TIP_CATEGORIES.app;
+  return (
+    <Card style={{ display: "flex", gap: 14, alignItems: "flex-start", textAlign: "left", padding: 18, background: colors.mintSoft, border: `1px solid ${colors.mint}` }}>
+      <img src={cat.icon} alt="" style={{ width: 36, height: 36, objectFit: "contain", flexShrink: 0 }} />
+      <div key={tip.text} className="speaksy-tip" style={{ minWidth: 0 }}>
+        <div style={{ fontFamily: font, fontSize: 11.5, fontWeight: 700, color: colors.teal, letterSpacing: .4, marginBottom: 5 }}>
+          TIP DE SPEAKSY · <span style={{ fontWeight: 600, color: colors.inkSoft }}>{cat.label}</span>
+        </div>
+        <p style={{ fontFamily: font, fontSize: 14.5, lineHeight: 1.5, color: colors.ink, margin: 0 }}>{tip.text}</p>
+      </div>
+    </Card>
+  );
+}
+
+// Estado de carga compartido: muestra el texto de carga y, solo si la espera
+// dura más de TIP_DELAY_MS, un tip. Nunca retrasa la carga: en cuanto los
+// datos llegan, el componente que lo usa deja de mostrarlo. Si hay error,
+// muestra el error (y un botón para reintentar) en lugar del tip.
+const TIP_DELAY_MS = 700;
+const TIP_ROTATE_MS = 9000;
+function LoadingPanel({ label = "Cargando…", error, onRetry, compact }) {
+  const { showLoadingTips } = React.useContext(PrefsContext);
+  const [tip, setTip] = useState(null);
+
+  useEffect(() => {
+    if (error || !showLoadingTips) return;
+    let rotate;
+    const show = setTimeout(() => {
+      setTip(nextTip());
+      rotate = setInterval(() => setTip(nextTip()), TIP_ROTATE_MS);
+    }, TIP_DELAY_MS);
+    return () => { clearTimeout(show); clearInterval(rotate); };
+  }, [error, showLoadingTips]);
+
+  const wrap = { maxWidth: 480, margin: "0 auto", padding: compact ? "4px 0" : "48px 24px", textAlign: "center" };
+  if (error) {
+    return (
+      <div style={wrap}>
+        <Note tone="danger">{error}</Note>
+        {onRetry && <GhostButton onClick={onRetry} style={{ marginTop: 14 }}>Reintentar</GhostButton>}
+      </div>
+    );
+  }
+  return (
+    <div style={wrap}>
+      <p role="status" style={{ fontFamily: font, color: colors.inkSoft, margin: "0 0 16px" }}>{label}</p>
+      {showLoadingTips && tip && <TipCard tip={tip} />}
+    </div>
+  );
+}
 
 /* ---------------------- Pantalla: sin Firebase configurado ---------------------- */
 function SetupNeeded() {
@@ -713,6 +896,10 @@ function BreathingPage({ uid, onSaved, goBack }) {
     </div>
   );
 }
+const inputStyle = {
+  width: "100%", padding: "11px 14px", borderRadius: 10, border: `1.5px solid ${colors.border}`,
+  fontFamily: font, fontSize: 14, marginBottom: 10, outline: "none",
+};
 const backLinkStyle = { background: "none", border: "none", color: colors.inkSoft, fontFamily: font, fontSize: 13.5, cursor: "pointer", marginBottom: 18, display: "block" };
 
 /* ---------------------- Ejercicio: lectura (niveles + temas) ---------------------- */
@@ -902,6 +1089,86 @@ function normalizeWord(w) {
     .replace(/[^\p{L}\p{N}]/gu, "");
 }
 
+function editDistanceAtMost1(a, b) {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++;
+    else if (a.length < b.length) j++;
+    else { i++; j++; }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
+
+// Una palabra dicha coincide si es igual, o casi igual en palabras largas
+// (el reconocedor a veces cambia una letra: "tesoros" por "tesoro").
+function wordsMatch(said, target) {
+  if (said === target) return true;
+  return target.length >= 5 && editDistanceAtMost1(said, target);
+}
+
+// Cuántas palabras del texto quedan cubiertas a partir de `t` por la palabra
+// dicha `s` (0 si no coincide). Cubre también sílabas o vocales que el
+// reconocedor junta en una sola palabra ("a e i o u" → "aeiou").
+function coveredWords(s, target, t) {
+  if (wordsMatch(s, target[t])) return 1;
+  let joined = target[t];
+  for (let k = t + 1; k < target.length && k < t + 6; k++) {
+    joined += target[k];
+    if (joined === s) return k - t + 1;
+    if (joined.length >= s.length) break;
+  }
+  return 0;
+}
+
+// Alinea lo dicho con el texto esperado empezando en `start`, de forma
+// tolerante: ignora palabras extra (repeticiones, muletillas, errores del
+// reconocedor) y permite saltar hasta 2 palabras que el reconocedor no captó.
+// Devuelve la posición alcanzada y cuántas palabras coincidieron de verdad.
+const SPEECH_LOOKAHEAD = 2;
+function alignSpoken(said, target, start) {
+  let t = start, hits = 0;
+  const skipEmpty = () => { while (t < target.length && !target[t]) { t++; hits++; } };
+  skipEmpty();
+  for (const s of said) {
+    if (t >= target.length) break;
+    for (let j = t; j <= t + SPEECH_LOOKAHEAD && j < target.length; j++) {
+      // Para saltar palabras exigimos una palabra no trivial, para que "de"
+      // o "la" no hagan avanzar el subrayado por error.
+      if (j > t && s.length < 3) break;
+      const n = coveredWords(s, target, j);
+      if (n > 0) { t = j + n; hits += n; skipEmpty(); break; }
+    }
+  }
+  return { position: t, hits };
+}
+
+// Sigue el avance de lectura a lo largo de varias sesiones de reconocimiento.
+// El navegador corta la sesión tras unos segundos de silencio y al reiniciarla
+// `e.results` vuelve a empezar vacío, así que cada sesión se alinea desde donde
+// quedó la anterior en vez de desde la primera palabra.
+function createSpeechTracker(words) {
+  const target = words.map(normalizeWord);
+  let current = alignSpoken([], target, 0);
+  let base = current;
+  return {
+    update(results) {
+      let transcript = "";
+      for (let i = 0; i < results.length; i++) transcript += results[i][0].transcript + " ";
+      const said = transcript.trim().split(/\s+/).map(normalizeWord).filter(Boolean);
+      const r = alignSpoken(said, target, base.position);
+      current = {
+        position: Math.max(current.position, r.position),
+        hits: Math.max(current.hits, base.hits + r.hits),
+      };
+      return current;
+    },
+    newSession() { base = current; },
+  };
+}
+
 function encodeWAV(samples, sampleRate) {
   const buffer = new ArrayBuffer(44 + samples.length * 2);
   const view = new DataView(buffer);
@@ -928,12 +1195,19 @@ function PronunciationAnalysis({ referenceText, allowAnalysis }) {
   const processorRef = useRef(null);
   const samplesRef = useRef([]);
 
+  useEffect(() => () => {
+    if (processorRef.current) processorRef.current.disconnect();
+    if (streamRef.current) stopStream(streamRef.current);
+    if (audioCtxRef.current) audioCtxRef.current.close().catch(() => {});
+  }, []);
+
   const start = async () => {
     setStatus("recording"); setResult(null); setError("");
     samplesRef.current = [];
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
+      micActivity.set(stream, true);
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       audioCtxRef.current = audioCtx;
       const source = audioCtx.createMediaStreamSource(stream);
@@ -952,7 +1226,7 @@ function PronunciationAnalysis({ referenceText, allowAnalysis }) {
     setStatus("analyzing");
     try {
       processorRef.current && processorRef.current.disconnect();
-      streamRef.current && streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current && stopStream(streamRef.current);
       const sampleRate = audioCtxRef.current.sampleRate;
       const total = samplesRef.current.reduce((s, a) => s + a.length, 0);
       const merged = new Float32Array(total);
@@ -992,9 +1266,9 @@ function PronunciationAnalysis({ referenceText, allowAnalysis }) {
           Análisis de pronunciación (beta)
         </div>
         <Note>
-          Esto está apagado. Actívalo desde Perfil → Privacidad y permisos si
-          quieres que tu audio se envíe a Azure para un puntaje de exactitud,
-          fluidez y completitud.
+          Esto está apagado. Actívalo desde Configuración → Tu voz y tu
+          privacidad si quieres que tu audio se envíe a Azure para un puntaje
+          de exactitud, fluidez y completitud.
         </Note>
       </Card>
     );
@@ -1026,7 +1300,7 @@ function PronunciationAnalysis({ referenceText, allowAnalysis }) {
       </p>
       {status === "idle" && <PrimaryButton onClick={start}>Grabar y analizar</PrimaryButton>}
       {status === "recording" && <GhostButton onClick={stop}>⏹ Detener y analizar</GhostButton>}
-      {status === "analyzing" && <Note>Analizando tu pronunciación…</Note>}
+      {status === "analyzing" && <LoadingPanel compact label="Analizando tu pronunciación…" />}
       {status === "error" && <Note tone="danger">{error}</Note>}
       {status === "done" && result && (
         <div>
@@ -1068,7 +1342,14 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
 
   const options = READING_TEXTS.filter((t) => t.level === level && t.topic === topic);
   const words = selected ? selected.text.split(/\s+/) : [];
-  const targetNormalized = words.map(normalizeWord);
+
+  const stopRecognition = () => {
+    recordingRef.current = false;
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch (e) {}
+    }
+  };
+  useEffect(() => stopRecognition, []);
 
   useEffect(() => {
     if (status !== "recording") return;
@@ -1092,19 +1373,15 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
 
     if (!SpeechRecognitionAPI) return;
 
-    const recognition = new SpeechRecognitionAPI();
+    const recognition = newRecognition();
     recognition.lang = "es-ES";
     recognition.continuous = true;
     recognition.interimResults = true;
+    const tracker = createSpeechTracker(words);
 
     recognition.onresult = (e) => {
-      let transcript = "";
-      for (let i = 0; i < e.results.length; i++) transcript += e.results[i][0].transcript + " ";
-      const said = transcript.trim().split(/\s+/).map(normalizeWord);
-      let count = 0;
-      for (let i = 0; i < Math.min(said.length, targetNormalized.length); i++) {
-        if (said[i] && said[i] === targetNormalized[i]) count = i + 1; else break;
-      }
+      const count = tracker.update(e.results).position;
+      setMicError("");
       setMatchedCount((prev) => {
         if (count > prev) timestampsRef.current.push(Date.now() - startTimeRef.current);
         return Math.max(prev, count);
@@ -1119,6 +1396,7 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
     };
     recognition.onend = () => {
       if (recordingRef.current) {
+        tracker.newSession();
         try { recognition.start(); } catch (e) {}
       }
     };
@@ -1144,10 +1422,7 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
   };
 
   const finish = async () => {
-    recordingRef.current = false;
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch (e) {}
-    }
+    stopRecognition();
     const fluency = computeFluency();
     setStatus("done");
     await saveSession(uid, {
@@ -1210,7 +1485,7 @@ function ReadingPage({ uid, onSaved, goBack, allowAnalysis }) {
 
   return (
     <div style={{ maxWidth: 620, margin: "0 auto", padding: "40px 24px 100px" }}>
-      <button onClick={() => setSelected(null)} style={backLinkStyle}>← Elegir otro texto</button>
+      <button onClick={() => { stopRecognition(); setStatus("idle"); setSelected(null); }} style={backLinkStyle}>← Elegir otro texto</button>
       <h1 style={{ fontFamily: display, fontSize: 24, color: colors.ink, marginBottom: 6 }}>{selected.title}</h1>
       <p style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginBottom: 18 }}>
         {LEVELS.find((l) => l[0] === level)[1]} · {TOPICS.find((t) => t[0] === topic)[1]}
@@ -1341,7 +1616,7 @@ function ConversationPage({ uid, onSaved, goBack }) {
 
   const startListening = () => {
     if (!SpeechRecognitionAPI) return;
-    const recognition = new SpeechRecognitionAPI();
+    const recognition = newRecognition();
     recognition.lang = "es-ES";
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
@@ -1554,44 +1829,58 @@ const SPEECH_PASS_THRESHOLD = 0.75;
 function ArticulationStage({ target, onDone, label }) {
   const [status, setStatus] = useState("idle");
   const [matchedCount, setMatchedCount] = useState(0);
+  const [hitCount, setHitCount] = useState(0);
   const recognitionRef = useRef(null);
   const recordingRef = useRef(false);
 
   const words = target.split(/\s+/);
-  const targetNormalized = words.map(normalizeWord);
+
+  const stopRecognition = () => {
+    recordingRef.current = false;
+    if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch (e) {} }
+  };
+  useEffect(() => stopRecognition, []);
 
   const start = () => {
-    setStatus("recording"); setMatchedCount(0);
+    setStatus("recording"); setMatchedCount(0); setHitCount(0);
     recordingRef.current = true;
     if (!SpeechRecognitionAPI) return;
-    const recognition = new SpeechRecognitionAPI();
+    const recognition = newRecognition();
     recognition.lang = "es-ES";
     recognition.continuous = true;
     recognition.interimResults = true;
+    const tracker = createSpeechTracker(words);
     recognition.onresult = (e) => {
-      let transcript = "";
-      for (let i = 0; i < e.results.length; i++) transcript += e.results[i][0].transcript + " ";
-      const said = transcript.trim().split(/\s+/).map(normalizeWord);
-      let count = 0;
-      for (let i = 0; i < Math.min(said.length, targetNormalized.length); i++) {
-        if (said[i] && said[i] === targetNormalized[i]) count = i + 1; else break;
-      }
-      setMatchedCount((prev) => Math.max(prev, count));
+      const { position, hits } = tracker.update(e.results);
+      setMatchedCount(position);
+      setHitCount(hits);
     };
-    recognition.onend = () => { if (recordingRef.current) { try { recognition.start(); } catch (e) {} } };
+    recognition.onerror = (e) => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed" || e.error === "audio-capture") {
+        recordingRef.current = false;
+        setStatus("idle");
+      }
+    };
+    recognition.onend = () => {
+      if (recordingRef.current) {
+        tracker.newSession();
+        try { recognition.start(); } catch (e) {}
+      }
+    };
     recognitionRef.current = recognition;
     try { recognition.start(); } catch (e) {}
   };
 
   const stop = () => {
-    recordingRef.current = false;
-    if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch (e) {} }
+    stopRecognition();
     setStatus("done");
   };
 
-  const fraction = words.length > 0 ? matchedCount / words.length : 0;
+  // Para aprobar contamos solo palabras realmente reconocidas, no las que el
+  // subrayado se saltó.
+  const fraction = words.length > 0 ? hitCount / words.length : 0;
   const passed = fraction >= SPEECH_PASS_THRESHOLD;
-  const missing = words.length - matchedCount;
+  const missing = words.length - hitCount;
 
   return (
     <Card style={{ marginBottom: 16 }}>
@@ -1612,12 +1901,12 @@ function ArticulationStage({ target, onDone, label }) {
         ) : (
           <GhostButton onClick={stop}>⏹ Listo</GhostButton>
         )}
-        <GhostButton disabled={!passed} onClick={() => onDone(matchedCount, words.length)}>Siguiente →</GhostButton>
+        <GhostButton disabled={!passed} onClick={() => onDone(hitCount, words.length)}>Siguiente →</GhostButton>
       </div>
       {!passed && (
         <p style={{ fontFamily: font, fontSize: 12, color: colors.inkSoft, marginTop: 10 }}>
           Di al menos la mayoría de la frase correctamente para continuar
-          {matchedCount > 0 ? ` (van ${matchedCount} de ${words.length} palabras — faltan ${missing}).` : ` (${words.length} palabras en total).`}
+          {hitCount > 0 ? ` (van ${hitCount} de ${words.length} palabras — faltan ${missing}).` : ` (${words.length} palabras en total).`}
         </p>
       )}
       {!SpeechRecognitionAPI && (
@@ -1660,7 +1949,7 @@ function BreathingLevelRunner({ level, onFinish, onExit }) {
     if (!running) return;
     if (hasWords && phases[phaseIdx].key === "exhale" && SpeechRecognitionAPI) {
       spokenThisCycleRef.current = false;
-      const recognition = new SpeechRecognitionAPI();
+      const recognition = newRecognition();
       recognition.lang = "es-ES";
       recognition.onresult = () => { spokenThisCycleRef.current = true; };
       recognition.onerror = () => {};
@@ -1763,7 +2052,7 @@ function ConversationLevelRunner({ level, onFinish }) {
 
   const startListening = () => {
     if (!SpeechRecognitionAPI) return;
-    const recognition = new SpeechRecognitionAPI();
+    const recognition = newRecognition();
     recognition.lang = "es-ES";
     recognition.interimResults = false;
     recognition.onresult = (e) => setDraft(e.results[0][0].transcript);
@@ -1952,7 +2241,16 @@ function LevelsPage({ uid, areaKey, goBack, onSaved }) {
   const [activeLevel, setActiveLevel] = useState(null);
   const [result, setResult] = useState(null);
 
-  const refreshProgress = async () => setProgress(await loadLevelProgress(uid, areaKey));
+  const [loadError, setLoadError] = useState("");
+
+  const refreshProgress = async () => {
+    setLoadError("");
+    try {
+      setProgress(await loadLevelProgress(uid, areaKey));
+    } catch (e) {
+      setLoadError("No pudimos cargar tus niveles. Revisa tu conexión e inténtalo de nuevo.");
+    }
+  };
   useEffect(() => { refreshProgress(); }, []);
 
   const handleFinish = async (fraction, durationSeconds) => {
@@ -1965,7 +2263,7 @@ function LevelsPage({ uid, areaKey, goBack, onSaved }) {
     onSaved();
   };
 
-  if (progress === null) return <p style={{ padding: 40, textAlign: "center", fontFamily: font, color: colors.inkSoft }}>Cargando…</p>;
+  if (progress === null) return <LoadingPanel label="Preparando tus niveles…" error={loadError} onRetry={refreshProgress} />;
 
   if (result) {
     return (
@@ -2065,8 +2363,17 @@ function CourseHome({ uid, navigate, xp }) {
   const [activeLevel, setActiveLevel] = useState(null);
   const [result, setResult] = useState(null);
 
+  const [loadError, setLoadError] = useState("");
+
   const loadAll = async (keepArea) => {
-    const pairs = await Promise.all(Object.keys(LEVEL_AREAS).map((k) => loadLevelProgress(uid, k).then((p) => [k, p])));
+    setLoadError("");
+    let pairs;
+    try {
+      pairs = await Promise.all(Object.keys(LEVEL_AREAS).map((k) => loadLevelProgress(uid, k).then((p) => [k, p])));
+    } catch (e) {
+      setLoadError("No pudimos cargar tu ruta de práctica. Revisa tu conexión e inténtalo de nuevo.");
+      return;
+    }
     const map = Object.fromEntries(pairs);
     setProgressByArea(map);
     if (!keepArea) {
@@ -2083,7 +2390,7 @@ function CourseHome({ uid, navigate, xp }) {
   useEffect(() => { loadAll(false); }, []);
 
   if (progressByArea === null || areaKey === null) {
-    return <p style={{ padding: 60, textAlign: "center", fontFamily: font, color: colors.inkSoft }}>Cargando…</p>;
+    return <LoadingPanel label="Preparando tu práctica…" error={loadError} onRetry={() => loadAll(false)} />;
   }
 
   const progressSummary = Object.fromEntries(
@@ -2411,13 +2718,17 @@ function CourseDetailPage({ areaKey, uid, navigate, goBack }) {
 
 function MyCoursesPage({ uid, navigate }) {
   const [progress, setProgress] = useState(null);
+  const [loadError, setLoadError] = useState("");
 
-  useEffect(() => {
+  const load = () => {
+    setLoadError("");
     Promise.all(Object.keys(COURSES).map((k) => loadLevelProgress(uid, k).then((p) => [k, p])))
-      .then((pairs) => setProgress(Object.fromEntries(pairs)));
-  }, []);
+      .then((pairs) => setProgress(Object.fromEntries(pairs)))
+      .catch(() => setLoadError("No pudimos cargar tus cursos. Revisa tu conexión e inténtalo de nuevo."));
+  };
+  useEffect(load, []);
 
-  if (!progress) return <p style={{ padding: 40, textAlign: "center", fontFamily: font, color: colors.inkSoft }}>Cargando…</p>;
+  if (!progress) return <LoadingPanel label="Cargando tus cursos…" error={loadError} onRetry={load} />;
 
   const started = Object.keys(COURSES).filter((k) => Object.keys(progress[k] || {}).length > 0);
   const notStarted = Object.keys(COURSES).filter((k) => !started.includes(k));
@@ -2664,8 +2975,8 @@ function LeaderboardPage({ uid }) {
       <h1 style={{ fontFamily: display, fontSize: 28, color: colors.ink, marginBottom: 6 }}>Ranking de constancia</h1>
       <p style={{ fontFamily: font, fontSize: 13.5, color: colors.inkSoft, marginBottom: 24 }}>
         Por XP de práctica — no mide qué tan fluida es la voz de nadie, solo
-        quién ha sido más constante. Aparecer aquí es opcional (Perfil →
-        Privacidad y permisos).
+        quién ha sido más constante. Aparecer aquí es opcional (Configuración →
+        Ranking).
       </p>
       {error && <Note tone="danger">{error}</Note>}
       {!error && rows === null && <p style={{ fontFamily: font, color: colors.inkSoft }}>Cargando…</p>}
@@ -2714,6 +3025,327 @@ function AchievementsPage({ stats }) {
   );
 }
 
+/* ---------------------- Configuración: micrófono ---------------------- */
+function detectBrowser() {
+  const ua = navigator.userAgent;
+  const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  const android = /Android/.test(ua);
+  let name = "otro";
+  if (/Edg(e|A|iOS)?\//.test(ua)) name = "Edge";
+  else if (/FxiOS|Firefox\//.test(ua)) name = "Firefox";
+  else if (/CriOS|Chrome\//.test(ua)) name = "Chrome";
+  else if (/Safari\//.test(ua)) name = "Safari";
+  const os = ios ? "ios" : android ? "android" : /Mac/.test(ua) ? "mac" : /Win/.test(ua) ? "windows" : "otro";
+  return { name, os };
+}
+
+function micUnblockSteps({ name, os }) {
+  const app = name === "otro" ? "tu navegador" : name;
+  const reload = "Recarga la página y pulsa «Comprobar de nuevo».";
+  if (os === "ios") {
+    if (name === "Safari") return [
+      "En la barra de direcciones toca «aA» → Configuración del sitio web → Micrófono → Permitir.",
+      "Si no aparece la opción: Ajustes del iPhone o iPad → Apps → Safari → Micrófono → «Preguntar» o «Permitir».",
+      reload,
+    ];
+    return [
+      `Abre los Ajustes del iPhone o iPad → Apps → ${app} y activa «Micrófono».`,
+      reload,
+    ];
+  }
+  if (os === "android") {
+    if (name === "Firefox") return [
+      "Toca el candado junto a la dirección → Permisos del sitio → Micrófono → Permitir.",
+      "Si sigue bloqueado: Ajustes de Android → Aplicaciones → Firefox → Permisos → Micrófono → Permitir.",
+      reload,
+    ];
+    return [
+      "Toca el ícono junto a la dirección de la página (candado o ajustes) → Permisos → Micrófono → Permitir.",
+      `Si sigue bloqueado: Ajustes de Android → Aplicaciones → ${app} → Permisos → Micrófono → Permitir.`,
+      reload,
+    ];
+  }
+  let steps;
+  if (name === "Firefox") steps = [
+    "Haz clic en el ícono del micrófono tachado o del candado, a la izquierda de la dirección.",
+    "Quita el bloqueo del micrófono con la ✕ que aparece junto a él.",
+    reload,
+  ];
+  else if (name === "Safari") steps = [
+    "En la barra de menús abre Safari → Configuración → Sitios web → Micrófono.",
+    "Busca este sitio y elige «Permitir».",
+    reload,
+  ];
+  else steps = [
+    "Haz clic en el ícono a la izquierda de la dirección de la página (candado o ajustes del sitio).",
+    "En «Micrófono», elige «Permitir».",
+    reload,
+  ];
+  if (os === "mac") steps.push(`Si aun así no funciona, revisa el permiso del sistema: Ajustes del Sistema → Privacidad y seguridad → Micrófono → activa ${app}.`);
+  if (os === "windows") steps.push("Si aun así no funciona, revisa el permiso del sistema: Configuración de Windows → Privacidad y seguridad → Micrófono → permite el acceso a las aplicaciones de escritorio.");
+  return steps;
+}
+
+// Estado del permiso del micrófono. Al montarse solo CONSULTA el estado (no
+// pide permiso); el permiso se pide únicamente con request(), desde un botón.
+function useMicPermission() {
+  const [state, setState] = useState("checking"); // checking | granted | denied | prompt | unknown | insecure | unsupported
+  const [problem, setProblem] = useState(""); // "" | no-device | busy | dismissed | otro texto
+  const [requesting, setRequesting] = useState(false);
+  const statusRef = useRef(null);
+
+  const queryPermission = async () => {
+    if (!navigator.permissions || !navigator.permissions.query) return "unknown";
+    try {
+      const status = await navigator.permissions.query({ name: "microphone" });
+      if (statusRef.current !== status) {
+        if (statusRef.current) statusRef.current.onchange = null;
+        statusRef.current = status;
+        status.onchange = () => setState(status.state);
+      }
+      return status.state;
+    } catch (e) {
+      return "unknown";
+    }
+  };
+
+  const hasAudioInput = async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      return devices.some((d) => d.kind === "audioinput");
+    } catch (e) {
+      return true;
+    }
+  };
+
+  const check = async () => {
+    setProblem("");
+    if (!window.isSecureContext) { setState("insecure"); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { setState("unsupported"); return; }
+    setState("checking");
+    const perm = await queryPermission();
+    // Antes de dar permiso algunos navegadores ocultan la lista de
+    // dispositivos, así que solo es concluyente con el permiso concedido.
+    if (perm === "granted" && !(await hasAudioInput())) setProblem("no-device");
+    setState(perm);
+  };
+
+  const request = async () => {
+    setRequesting(true);
+    setProblem("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micActivity.set(stream, true);
+      stopStream(stream);
+      const perm = await queryPermission();
+      setState(perm === "unknown" ? "granted" : perm);
+    } catch (e) {
+      if (e.name === "NotAllowedError" || e.name === "SecurityError") {
+        const perm = await queryPermission();
+        if (perm === "prompt") { setState("prompt"); setProblem("dismissed"); }
+        else setState("denied");
+      } else if (e.name === "NotFoundError" || e.name === "OverconstrainedError") {
+        setProblem("no-device");
+      } else if (e.name === "NotReadableError" || e.name === "AbortError") {
+        setProblem("busy");
+      } else {
+        setProblem(e.message || "error desconocido");
+      }
+    }
+    setRequesting(false);
+  };
+
+  useEffect(() => {
+    check();
+    return () => { if (statusRef.current) statusRef.current.onchange = null; };
+  }, []);
+
+  return { state, problem, requesting, check, request };
+}
+
+const MIC_STATES = {
+  checking: { label: "Comprobando…", color: colors.inkSoft, bg: colors.mintSoft,
+    text: "Revisando el estado del micrófono." },
+  granted: { label: "Permitido", color: colors.teal, bg: colors.mintSoft,
+    text: "Speaksy puede usar el micrófono, pero solo lo enciende cuando inicias una práctica de voz." },
+  prompt: { label: "Todavía no solicitado", color: "#9A5A12", bg: colors.amberSoft,
+    text: "Aún no diste permiso. Tu navegador te lo preguntará cuando pulses el botón de abajo o empieces una práctica de voz." },
+  denied: { label: "Bloqueado", color: colors.danger, bg: "#FBEAE5",
+    text: "El micrófono está bloqueado para Speaksy. Mientras siga así no podrás usar las prácticas de voz. Para habilitarlo:" },
+  unknown: { label: "Sin información", color: colors.inkSoft, bg: colors.mintSoft,
+    text: "Tu navegador no informa el estado del permiso. Pulsa «Probar micrófono» para comprobarlo; si es la primera vez, te pedirá permiso." },
+  insecure: { label: "No disponible", color: colors.danger, bg: "#FBEAE5",
+    text: "Los navegadores solo permiten el micrófono en páginas seguras (https://). Abre Speaksy desde su dirección web en lugar de abrir el archivo directamente." },
+  unsupported: { label: "No compatible", color: colors.danger, bg: "#FBEAE5",
+    text: "Este navegador no permite acceder al micrófono. Prueba con una versión reciente de Chrome, Edge, Safari o Firefox." },
+};
+
+const MIC_PROBLEMS = {
+  "no-device": "No encontramos ningún micrófono. Conecta uno o revisa que no esté desactivado en tu sistema, y pulsa «Comprobar de nuevo».",
+  busy: "El micrófono existe, pero no se pudo usar: puede que otra aplicación o pestaña lo esté ocupando. Ciérrala y vuelve a intentarlo.",
+  dismissed: "Cerraste el aviso del navegador sin dar permiso. Puedes volver a intentarlo cuando quieras.",
+};
+
+function MicrophonePermissionsCard() {
+  const { state, problem, requesting, check, request } = useMicPermission();
+  const info = MIC_STATES[state];
+  const browser = detectBrowser();
+  const canRequest = state === "prompt" || state === "unknown";
+
+  return (
+    <Card style={{ marginBottom: 18 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
+        <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink }}>Permisos del micrófono</div>
+        <span style={{
+          fontFamily: font, fontSize: 12.5, fontWeight: 700, color: info.color, background: info.bg,
+          border: `1.5px solid ${info.color}`, borderRadius: 999, padding: "4px 12px",
+        }}>{info.label}</span>
+      </div>
+      <p style={{ fontFamily: font, fontSize: 13, color: colors.inkSoft, lineHeight: 1.55, margin: "0 0 14px" }}>
+        Speaksy necesita el micrófono para escuchar tu voz durante las prácticas,
+        reconocer las palabras que dices y darte retroalimentación cuando tu
+        navegador lo permite (por ejemplo, subrayar el texto mientras lees).
+      </p>
+
+      <div aria-live="polite">
+        <p style={{ fontFamily: font, fontSize: 13.5, color: colors.ink, lineHeight: 1.55, margin: "0 0 10px" }}>{info.text}</p>
+        {state === "denied" && (
+          <ol style={{ fontFamily: font, fontSize: 13, color: colors.inkSoft, lineHeight: 1.6, margin: "0 0 12px", paddingLeft: 20 }}>
+            {micUnblockSteps(browser).map((step) => <li key={step} style={{ marginBottom: 4 }}>{step}</li>)}
+          </ol>
+        )}
+        {problem && (
+          <div style={{ marginBottom: 12 }}>
+            <Note tone="danger">{MIC_PROBLEMS[problem] || `No se pudo acceder al micrófono: ${problem}`}</Note>
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        {canRequest && (
+          <PrimaryButton onClick={request} disabled={requesting}>
+            {requesting ? "Esperando respuesta…" : state === "unknown" ? "Probar micrófono" : "Permitir micrófono"}
+          </PrimaryButton>
+        )}
+        {state !== "checking" && state !== "insecure" && state !== "unsupported" && (
+          <GhostButton onClick={check} disabled={requesting}>Comprobar de nuevo</GhostButton>
+        )}
+      </div>
+
+      <div style={{ borderTop: `1px solid ${colors.border}`, margin: "16px 0 12px" }} />
+      <p style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, lineHeight: 1.55, margin: 0 }}>
+        {SpeechRecognitionAPI
+          ? "Reconocimiento de voz del navegador: disponible. Se usa para subrayar el texto y escribir tus respuestas habladas."
+          : "Reconocimiento de voz del navegador: no disponible aquí. Puedes practicar igual, pero sin subrayado en vivo ni respuestas por voz. Funciona en Chrome, Edge y Safari."}
+      </p>
+    </Card>
+  );
+}
+
+/* ---------------------- Configuración: privacidad ---------------------- */
+function PrivacyHeading({ children }) {
+  return <div style={{ fontFamily: font, fontWeight: 700, fontSize: 13.5, color: colors.ink, margin: "16px 0 6px" }}>{children}</div>;
+}
+const privacyText = { fontFamily: font, fontSize: 13, color: colors.inkSoft, lineHeight: 1.6, margin: 0 };
+
+function VoicePrivacyCard({ allowAnalysis, onToggleAnalysis }) {
+  return (
+    <Card style={{ marginBottom: 18 }}>
+      <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 4 }}>Tu voz y tu privacidad</div>
+
+      <PrivacyHeading>Para qué se usa el micrófono</PrivacyHeading>
+      <ul style={{ ...privacyText, paddingLeft: 20 }}>
+        <li>Lectura y articulación: subrayar las palabras a medida que las dices.</li>
+        <li>Conversación: convertir tu respuesta hablada en texto para mostrártela.</li>
+        <li>Niveles de respiración con palabras: detectar si hablaste al exhalar.</li>
+        <li>Análisis de pronunciación (opcional, ver abajo).</li>
+      </ul>
+
+      <PrivacyHeading>Cuándo se activa</PrivacyHeading>
+      <p style={privacyText}>
+        Solo cuando tú empiezas una actividad de voz: al pulsar «Comenzar
+        grabación», «Practicar», «Responder por voz» o «Grabar y analizar», y
+        durante la fase de exhalar de los niveles de respiración que piden decir
+        palabras. Se apaga al terminar o al salir de la actividad. Mientras está
+        encendido, verás este aviso en la barra de arriba:
+      </p>
+      <div style={{ margin: "10px 0 2px" }}><MicActiveBadge preview /></div>
+
+      <PrivacyHeading>Qué pasa con tu audio y la transcripción</PrivacyHeading>
+      <ul style={{ ...privacyText, paddingLeft: 20 }}>
+        <li style={{ marginBottom: 6 }}>
+          El reconocimiento en vivo lo hace el servicio de voz de tu navegador,
+          no Speaksy. Speaksy no recibe tu audio, solo el texto reconocido. En
+          muchos navegadores (por ejemplo, Chrome) ese audio se envía a los
+          servidores de la empresa del navegador para convertirlo en texto, según
+          su propia política de privacidad.
+        </li>
+        <li style={{ marginBottom: 6 }}>
+          El texto reconocido se usa en el momento para subrayar palabras o
+          mostrar tu respuesta. Speaksy no lo guarda.
+        </li>
+        <li>
+          En tu cuenta (Firebase) se guardan solo datos de la sesión: tipo de
+          práctica, duración, cuántas palabras se siguieron, ritmo, pausas y
+          las valoraciones que eliges. No se guardan grabaciones ni transcripciones.
+        </li>
+      </ul>
+
+      <div style={{ borderTop: `1px solid ${colors.border}`, margin: "16px 0" }} />
+
+      <ToggleRow checked={allowAnalysis} onChange={onToggleAnalysis}
+        title="Permitir análisis de pronunciación con un servicio externo (Microsoft Azure)">
+        Está apagado salvo que lo actives. Si lo activas, solo cuando pulses
+        «Grabar y analizar» en Lectura, esa grabación se envía a un servidor de
+        Speaksy (Firebase Cloud Functions), que la reenvía a Microsoft Azure para
+        calcular exactitud, fluidez y completitud. Speaksy no guarda esa grabación
+        ni el resultado: solo te muestra los puntajes. Azure procesa el audio
+        según sus propias condiciones de servicio.
+      </ToggleRow>
+    </Card>
+  );
+}
+
+/* ---------------------- Configuración: experiencia ---------------------- */
+function ExperienceCard({ showLoadingTips, onToggleTips, tipsError }) {
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
+  return (
+    <Card style={{ marginBottom: 18 }}>
+      <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 14 }}>Ajustes de la experiencia</div>
+      <ToggleRow checked={showLoadingTips} onChange={onToggleTips} title="Mostrar tips durante las cargas">
+        Mientras se prepara una actividad aparece un consejo breve sobre
+        comunicación, práctica o uso de Speaksy. Nunca alarga la espera.
+      </ToggleRow>
+      {tipsError && <div style={{ marginTop: 10 }}><Note tone="danger">{tipsError}</Note></div>}
+
+      <div style={{ borderTop: `1px solid ${colors.border}`, margin: "16px 0" }} />
+
+      <button onClick={() => setShowHowItWorks((v) => !v)} aria-expanded={showHowItWorks} style={{
+        background: "none", border: "none", padding: 0, cursor: "pointer",
+        fontFamily: font, fontWeight: 600, fontSize: 13.5, color: colors.teal,
+      }}>
+        {showHowItWorks ? "▾" : "▸"} Cómo funcionan las prácticas de voz
+      </button>
+      {showHowItWorks && (
+        <ol style={{ ...privacyText, paddingLeft: 20, marginTop: 10 }}>
+          <li style={{ marginBottom: 6 }}>Pulsas el botón para empezar y tu navegador enciende el micrófono.</li>
+          <li style={{ marginBottom: 6 }}>El reconocimiento de voz del navegador convierte lo que dices en texto.</li>
+          <li style={{ marginBottom: 6 }}>
+            Speaksy compara ese texto con la frase esperada y va subrayando las
+            palabras. Tolera repeticiones y pausas, y puede saltarse alguna
+            palabra que el reconocedor no captó.
+          </li>
+          <li>
+            Al terminar ves datos aproximados, como ritmo y pausas. Son una guía
+            para practicar, no una evaluación clínica: el reconocimiento puede
+            fallar con ruido o con voces y acentos que no reconoce bien.
+          </li>
+        </ol>
+      )}
+    </Card>
+  );
+}
+
 function ProfilePage({ uid, profile, onSaved }) {
   const [name, setName] = useState(profile.name || "");
   const [nameSaved, setNameSaved] = useState(false);
@@ -2721,6 +3353,8 @@ function ProfilePage({ uid, profile, onSaved }) {
   const [focusSelection, setFocusSelection] = useState(profile.focusAreas || []);
   const [allowAnalysis, setAllowAnalysis] = useState(!!profile.allowPronunciationAnalysis);
   const [showOnLeaderboard, setShowOnLeaderboard] = useState(!!profile.showOnLeaderboard);
+  const [showLoadingTips, setShowLoadingTips] = useState(prefsFromProfile(profile).showLoadingTips);
+  const [tipsError, setTipsError] = useState("");
   const [saving, setSaving] = useState(false);
 
   const saveName = async () => {
@@ -2749,6 +3383,19 @@ function ProfilePage({ uid, profile, onSaved }) {
     onSaved();
   };
 
+  const toggleLoadingTips = async () => {
+    const next = !showLoadingTips;
+    setShowLoadingTips(next);
+    setTipsError("");
+    try {
+      await db.collection("users").doc(uid).set({ showLoadingTips: next }, { merge: true });
+      onSaved();
+    } catch (e) {
+      setShowLoadingTips(!next);
+      setTipsError("No se pudo guardar este ajuste. Revisa tu conexión e inténtalo de nuevo.");
+    }
+  };
+
   const toggleLeaderboard = async () => {
     const next = !showOnLeaderboard;
     setShowOnLeaderboard(next);
@@ -2771,7 +3418,16 @@ function ProfilePage({ uid, profile, onSaved }) {
 
   return (
     <div style={{ maxWidth: 640, margin: "0 auto", padding: "36px 24px 100px" }}>
-      <h1 style={{ fontFamily: display, fontSize: 28, color: colors.ink, marginBottom: 24 }}>Perfil y configuración</h1>
+      <h1 style={{ fontFamily: display, fontSize: 28, color: colors.ink, marginBottom: 6 }}>Configuración</h1>
+      <p style={{ fontFamily: font, fontSize: 13.5, color: colors.inkSoft, marginBottom: 24 }}>
+        Administra el micrófono, entiende qué pasa con tu voz y ajusta tu experiencia en Speaksy.
+      </p>
+
+      <MicrophonePermissionsCard />
+      <VoicePrivacyCard allowAnalysis={allowAnalysis} onToggleAnalysis={toggleAnalysisPermission} />
+      <ExperienceCard showLoadingTips={showLoadingTips} onToggleTips={toggleLoadingTips} tipsError={tipsError} />
+
+      <h2 style={{ fontFamily: display, fontSize: 21, color: colors.ink, margin: "32px 0 14px" }}>Tu perfil</h2>
 
       <Card style={{ marginBottom: 18 }}>
         <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 4 }}>Cómo quieres que te llamemos</div>
@@ -2827,43 +3483,14 @@ function ProfilePage({ uid, profile, onSaved }) {
       </Card>
 
       <Card>
-        <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 4 }}>Privacidad y permisos</div>
-        <p style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginBottom: 16 }}>
-          El micrófono en sí lo controla tu navegador (candado en la barra de
-          direcciones) — esto de aquí es sobre qué hace Speaksy con lo que grabas.
-        </p>
-        <label style={{ display: "flex", gap: 12, alignItems: "flex-start", cursor: "pointer" }}>
-          <input type="checkbox" checked={allowAnalysis} onChange={toggleAnalysisPermission} style={{ marginTop: 3 }} />
-          <div>
-            <div style={{ fontFamily: font, fontWeight: 600, fontSize: 13.5, color: colors.ink }}>
-              Permitir análisis de pronunciación con un servicio externo (Azure)
-            </div>
-            <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginTop: 3, lineHeight: 1.5 }}>
-              Solo cuando presionas "Grabar y analizar" en Lectura, tu audio de esa
-              grabación se envía a Azure para calcular exactitud, fluidez y
-              completitud. Si esto está apagado, esa función queda desactivada.
-              El resaltado en vivo mientras lees no depende de esto — ese usa el
-              reconocimiento de voz del navegador, nunca sale de tu dispositivo.
-            </div>
-          </div>
-        </label>
-
-        <div style={{ borderTop: `1px solid ${colors.border}`, margin: "16px 0" }} />
-
-        <label style={{ display: "flex", gap: 12, alignItems: "flex-start", cursor: "pointer" }}>
-          <input type="checkbox" checked={showOnLeaderboard} onChange={toggleLeaderboard} style={{ marginTop: 3 }} />
-          <div>
-            <div style={{ fontFamily: font, fontWeight: 600, fontSize: 13.5, color: colors.ink }}>
-              Aparecer en el ranking de constancia con otros usuarios
-            </div>
-            <div style={{ fontFamily: font, fontSize: 12.5, color: colors.inkSoft, marginTop: 3, lineHeight: 1.5 }}>
-              El ranking ordena por XP de práctica (constancia), nunca por qué
-              tan fluida es la voz de alguien. Si activas esto, tu nombre y tu
-              XP se vuelven visibles para otros usuarios de Speaksy. Puedes
-              apagarlo cuando quieras y desaparecerás del ranking.
-            </div>
-          </div>
-        </label>
+        <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 14 }}>Ranking</div>
+        <ToggleRow checked={showOnLeaderboard} onChange={toggleLeaderboard}
+          title="Aparecer en el ranking de constancia con otros usuarios">
+          El ranking ordena por XP de práctica (constancia), nunca por qué
+          tan fluida es la voz de alguien. Si activas esto, tu nombre y tu
+          XP se vuelven visibles para otros usuarios de Speaksy. Puedes
+          apagarlo cuando quieras y desaparecerás del ranking.
+        </ToggleRow>
       </Card>
     </div>
   );
@@ -2894,11 +3521,13 @@ function TopBar({ page, navigate, onLogout }) {
 
   return (
     <div style={{ position: "sticky", top: 0, zIndex: 30, borderBottom: `1px solid ${colors.border}`, background: colors.card }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 24px", fontFamily: font }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, padding: "14px 24px", fontFamily: font }}>
         <div onClick={() => go("dashboard")} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
           <img src="fotos/Logo.png" alt="Speaksy" style={{ height: 34, width: "auto", objectFit: "contain" }} />
           <span style={{ fontFamily: display, fontWeight: 600, fontSize: 20, color: colors.ink }}>Speaksy</span>
         </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <MicActiveBadge />
         <div ref={menuRef} style={{ position: "relative" }}>
           <button onClick={() => setOpen((o) => !o)} style={{
             display: "flex", alignItems: "center", gap: 8, background: open ? colors.mintSoft : "transparent",
@@ -2952,6 +3581,7 @@ function TopBar({ page, navigate, onLogout }) {
             </div>
           )}
         </div>
+        </div>
       </div>
     </div>
   );
@@ -2969,9 +3599,15 @@ function PracticeBuilderPage({ uid, onSaved }) {
   const [steps, setSteps] = useState([]);
   const [routineName, setRoutineName] = useState("");
 
+  const [routinesError, setRoutinesError] = useState("");
   const loadRoutines = async () => {
-    const snap = await db.collection("users").doc(uid).collection("routines").orderBy("createdAt", "desc").get();
-    setRoutines(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    setRoutinesError("");
+    try {
+      const snap = await db.collection("users").doc(uid).collection("routines").orderBy("createdAt", "desc").get();
+      setRoutines(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    } catch (e) {
+      setRoutinesError("No pudimos cargar tus rutinas guardadas. Revisa tu conexión e inténtalo de nuevo.");
+    }
   };
   useEffect(() => { loadRoutines(); }, []);
 
@@ -3168,7 +3804,7 @@ function PracticeBuilderPage({ uid, onSaved }) {
         + Nueva práctica
       </PrimaryButton>
       {routines === null ? (
-        <p style={{ fontFamily: font, color: colors.inkSoft }}>Cargando tus rutinas…</p>
+        <LoadingPanel compact label="Cargando tus rutinas…" error={routinesError} onRetry={loadRoutines} />
       ) : routines.length === 0 ? (
         <Note>Todavía no guardaste ninguna rutina personalizada.</Note>
       ) : (
@@ -3218,7 +3854,9 @@ function LoggedInApp({ authUser }) {
   const user = { name: profile.name, email: profile.email };
 
   return (
+    <PrefsContext.Provider value={prefsFromProfile(profile)}>
     <div style={{ background: "transparent", minHeight: "100vh" }}>
+      <style>{APP_CSS}</style>
       <TopBar page={page} navigate={setPage} onLogout={() => auth.signOut()} />
       {page === "dashboard" && <CourseHome uid={authUser.uid} navigate={setPage} xp={profile.xp || 0} />}
       {page === "mis-cursos" && <MyCoursesPage uid={authUser.uid} navigate={setPage} />}
@@ -3241,6 +3879,7 @@ function LoggedInApp({ authUser }) {
       {page === "levels-articulation" && <LevelsPage uid={authUser.uid} areaKey="articulation" goBack={() => setPage("curso-articulation")} onSaved={refresh} />}
       {page === "profile" && <ProfilePage uid={authUser.uid} profile={profile} onSaved={refresh} />}
     </div>
+    </PrefsContext.Provider>
   );
 }
 
