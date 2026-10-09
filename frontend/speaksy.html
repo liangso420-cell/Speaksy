@@ -52,7 +52,7 @@ try {
 const auth = firebaseOk ? firebase.auth() : null;
 const db = firebaseOk ? firebase.firestore() : null;
 
-// URL de tu Cloud Function de análisis de pronunciación (ver functions/index.js
+// URL de tu Cloud Function de análisis de pronunciación (ver backend/functions/index.js
 // y STATUS.md). Queda vacía hasta que despliegues la función; mientras tanto
 // el botón de "Análisis de pronunciación (beta)" se muestra desactivado.
 const FUNCTIONS_URL = "https://us-central1-speaksy-9c32d.cloudfunctions.net/assessPronunciation";
@@ -1347,7 +1347,7 @@ function PronunciationAnalysis({ referenceText, allowAnalysis }) {
         </div>
         <Note>
           Todavía no está conectado el backend de análisis (Azure). Revisa
-          STATUS.md y functions/index.js para desplegarlo; mientras tanto este
+          STATUS.md y backend/functions/index.js para desplegarlo; mientras tanto este
           botón queda desactivado.
         </Note>
       </Card>

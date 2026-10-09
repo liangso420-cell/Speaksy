@@ -4,11 +4,11 @@
 
 > **Cambio de arquitectura:** se descartó el plan de Flask + PostgreSQL
 > (carpetas `backend/` y `database/` de más abajo) a favor de un solo archivo
-> **`speaksy.html`** con **Firebase Authentication + Firestore**, para poder
+> **`frontend/speaksy.html`** con **Firebase Authentication + Firestore**, para poder
 > abrir la app directo en el navegador sin instalar nada. El resto de este
 > documento describe el estado del enfoque anterior (Flask/Postgres) tal
 > cual quedó — se conserva como referencia, no se sigue desarrollando.
-> El estado del nuevo enfoque está más abajo, en "Estado de speaksy.html".
+> El estado del nuevo enfoque está más abajo, en "Estado de frontend/speaksy.html".
 Este archivo existe para que cualquier persona o IA que retome el proyecto
 sepa, sin adivinar, **qué está construido, qué es solo apariencia (mock) y
 qué no existe todavía**. Léelo antes de tocar código.
@@ -16,6 +16,22 @@ qué no existe todavía**. Léelo antes de tocar código.
 Leyenda: ✅ funciona de verdad · 🟡 construido pero no conectado/probado · ⚪ no existe
 
 ---
+
+## Estructura del proyecto
+
+```
+index.html            Página de presentación (enlaza a frontend/speaksy.html)
+frontend/
+  speaksy.html        La app (React + Firebase, todo en un archivo)
+  fotos/              Imágenes e íconos
+backend/
+  functions/          Cloud Function de análisis de pronunciación (Azure)
+  firestore.rules     Reglas de seguridad de Firestore
+  firestore.indexes.json
+firebase.json         Configuración de Firebase (debe quedarse en la raíz)
+.firebaserc           Proyecto de Firebase por defecto
+descartado-flask-postgres/   Versión antigua, ya no se usa
+```
 
 ## Resumen en una frase
 
@@ -86,7 +102,7 @@ backend NO están conectados entre sí todavía.**
 
 ---
 
-## Estado de `speaksy.html` (enfoque actual, Firebase)
+## Estado de `frontend/speaksy.html` (enfoque actual, Firebase)
 
 Un solo archivo, se abre haciendo doble clic o sirviéndolo con cualquier
 servidor estático. Usa React vía CDN + Babel en el navegador (sin paso de
@@ -101,7 +117,7 @@ build) y el SDK "compat" de Firebase vía CDN.
   hardcodeadas.
 - Logros que se desbloquean solos según sesiones y racha reales
   (`/users/{uid}/achievements`).
-- `firestore.rules` — reglas de seguridad para que cada usuario solo pueda
+- `backend/firestore.rules` — reglas de seguridad para que cada usuario solo pueda
   leer/escribir sus propios datos. **Hay que pegarlas en la consola de
   Firebase manualmente**; el archivo HTML no las aplica solo.
 
@@ -110,7 +126,7 @@ Firebase real (este entorno no tiene acceso a internet), así que no hay
 garantía de que compile o corra sin ajustes al primer intento. Antes de
 confiar en él: crea un proyecto en Firebase, activa Authentication
 (email/contraseña) y Firestore, pega tus claves en `firebaseConfig`, pega
-las reglas de `firestore.rules`, y ábrelo en el navegador para probar
+las reglas de `backend/firestore.rules`, y ábrelo en el navegador para probar
 registro → respiración → ver que aparece en el dashard.
 
 **⚪ Sigue sin existir aquí:** onboarding, `/privacy` con borrado de
@@ -132,12 +148,12 @@ grabaciones y cuenta, logros de "30 sesiones" con más de 200 sesiones
   hacía parecer que "no funcionaba". Ahora se muestra un mensaje claro.
 
 **🟡 Análisis de pronunciación real — código escrito, NO desplegado ni probado:**
-- `functions/index.js` — una Cloud Function de Firebase que recibe audio real
+- `backend/functions/index.js` — una Cloud Function de Firebase que recibe audio real
   grabado en el navegador y llama a **Azure Speech Pronunciation Assessment**
   (servicio de pago, con nivel gratuito limitado) para puntuar exactitud,
   fluidez y completitud por palabra. La clave de Azure vive solo en el
   servidor, nunca en el HTML.
-- El botón "Análisis de pronunciación (beta)" en `speaksy.html` graba audio
+- El botón "Análisis de pronunciación (beta)" en `frontend/speaksy.html` graba audio
   real con el micrófono, lo convierte a WAV, y llama a esa función.
 - **Para que esto funcione hace falta, fuera de este entorno:**
   1. Crear un recurso de Azure Speech (tiene nivel gratuito F0, ~5h de audio/mes).
@@ -149,24 +165,24 @@ grabaciones y cuenta, logros de "30 sesiones" con más de 200 sesiones
      `firebase functions:config:set azure.key="..." azure.region="..."`, y
      `firebase deploy --only functions`.
   4. Copiar la URL que te da el deploy y pegarla en `FUNCTIONS_URL` al inicio
-     del script de `speaksy.html`.
+     del script de `frontend/speaksy.html`.
 - **Nunca probé este flujo de punta a punta** (sin red ni cuenta de Azure en
   este entorno). Es razonablemente probable que necesite algún ajuste al
   primer intento — revísalo con calma, no asumas que compila a la primera.
 
 ## Análisis de pronunciación real (Azure) — YA DESPLEGADO Y FUNCIONANDO
 
-Se completó el despliegue real de `functions/index.js` a `speaksy-9c32d`
+Se completó el despliegue real de `backend/functions/index.js` a `speaksy-9c32d`
 (Cloud Functions Gen 1, Node.js 20, región us-central1). El botón "Análisis
-de pronunciación (beta)" en `speaksy.html` ya tiene su `FUNCTIONS_URL` real
+de pronunciación (beta)" en `frontend/speaksy.html` ya tiene su `FUNCTIONS_URL` real
 configurada y fue probado por el usuario. Detalles que costó resolver, por
 si se repite un despliegue futuro:
 - `firebase functions:config:set` está descontinuado (Google lo apagó a
-  fines de 2025) — la configuración va en `functions/.env`
+  fines de 2025) — la configuración va en `backend/functions/.env`
   (`AZURE_KEY=...` / `AZURE_REGION=...`).
 - El plan Blaze de Firebase es obligatorio para funciones que llaman
   servicios externos.
-- Node.js 18 fue descontinuado; `functions/package.json` quedó fijado en
+- Node.js 18 fue descontinuado; `backend/functions/package.json` quedó fijado en
   `"node": "20"`.
 - Si una función quedó creada como 2ª generación y el redeploy intenta 1ª
   generación (por la versión de `firebase-functions` instalada), hay que
@@ -210,8 +226,8 @@ si se repite un despliegue futuro:
   a Azure ni a ningún backend propio.
 - Se agregó `index.html`: página de aterrizaje estática (sin Firebase),
   mismo lenguaje visual, con un anillo de respiración interactivo como
-  elemento de marca, que enlaza a `speaksy.html`. Debe vivir en la misma
-  carpeta que `speaksy.html` para que el enlace relativo funcione.
+  elemento de marca, que enlaza a `frontend/speaksy.html`. Vive en la raíz del proyecto; si
+  mueves `index.html` o la carpeta `frontend/`, actualiza ese enlace.
 - **No probado en un despliegue real** — mismo motivo de siempre.
 
 ## Ranking de constancia (XP) — nuevo
@@ -230,7 +246,7 @@ advertía evitar ("progreso personal > comparación con otros"). En su lugar:
   `displayName` y `xp`. Nadie aparece ahí por defecto — el usuario tiene que
   activarlo explícitamente en Perfil → Privacidad y permisos, y puede
   desactivarlo cuando quiera (borra su fila del ranking al instante).
-- `firestore.rules` actualizado: cualquier usuario con sesión puede leer la
+- `backend/firestore.rules` actualizado: cualquier usuario con sesión puede leer la
   colección `leaderboard` completa, pero solo puede escribir su propio
   documento — **hay que volver a publicar las reglas actualizadas en la
   consola de Firebase**, las viejas no incluyen esto.
@@ -269,7 +285,7 @@ lectura, conversación y articulación libres siguen ahí, intactas).
   conectoras, no el mapa serpenteante ilustrado de Duolingo — mantuve el
   lenguaje visual ya establecido de Speaksy en vez de construir un editor de
   mapas nuevo.
-- `firestore.rules` actualizado con la subcolección `levelProgress` — hay
+- `backend/firestore.rules` actualizado con la subcolección `levelProgress` — hay
   que volver a publicar las reglas en la consola de Firebase.
 - **No probado en un despliegue real todavía** — motivo de siempre (sin
   navegador ni Firebase real en este entorno).
