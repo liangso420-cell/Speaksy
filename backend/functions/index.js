@@ -13,10 +13,10 @@ const fetch = require("node-fetch");
  
 admin.initializeApp();
  
-// Configura esto con:
-//   firebase functions:config:set azure.key="TU_CLAVE" azure.region="TU_REGION"
-// (por ejemplo azure.region="eastus" — la región que elegiste al crear el
-// recurso de Azure Speech).
+// Configura esto creando un archivo backend/functions/.env con estas dos líneas
+// (functions:config:set ya no funciona, Google lo apagó a fines de 2025):
+//   AZURE_KEY=tu_clave
+//   AZURE_REGION=tu_region   (ej. eastus)
 const AZURE_KEY = process.env.AZURE_KEY;
 const AZURE_REGION = process.env.AZURE_REGION;
  
@@ -81,6 +81,7 @@ exports.assessPronunciation = functions.https.onRequest(async (req, res) => {
     }
  
     const data = await azureRes.json();
+    console.log("Respuesta cruda de Azure:", JSON.stringify(data)); // TEMPORAL, para depurar
     const best = data?.NBest?.[0];
     if (!best) {
       res.status(200).json({ error: "No se pudo reconocer audio suficiente para evaluar." });
@@ -102,3 +103,4 @@ exports.assessPronunciation = functions.https.onRequest(async (req, res) => {
     res.status(500).json({ error: "Error llamando a Azure", detail: String(e) });
   }
 });
+ 
