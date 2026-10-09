@@ -250,18 +250,76 @@ function nextTip() {
   return lastTip;
 }
 
-function TipCard({ tip }) {
+function TipCard({ tip, onClose, style }) {
   const cat = TIP_CATEGORIES[tip.category] || TIP_CATEGORIES.app;
   return (
-    <Card style={{ display: "flex", gap: 14, alignItems: "flex-start", textAlign: "left", padding: 18, background: colors.mintSoft, border: `1px solid ${colors.mint}` }}>
+    <Card style={{ display: "flex", gap: 14, alignItems: "flex-start", textAlign: "left", padding: 18, background: colors.mintSoft, border: `1px solid ${colors.mint}`, ...style }}>
       <img src={cat.icon} alt="" style={{ width: 36, height: 36, objectFit: "contain", flexShrink: 0 }} />
-      <div key={tip.text} className="speaksy-tip" style={{ minWidth: 0 }}>
+      <div key={tip.text} className="speaksy-tip" style={{ minWidth: 0, flex: 1 }}>
         <div style={{ fontFamily: font, fontSize: 11.5, fontWeight: 700, color: colors.teal, letterSpacing: .4, marginBottom: 5 }}>
           TIP DE SPEAKSY · <span style={{ fontWeight: 600, color: colors.inkSoft }}>{cat.label}</span>
         </div>
         <p style={{ fontFamily: font, fontSize: 14.5, lineHeight: 1.5, color: colors.ink, margin: 0 }}>{tip.text}</p>
       </div>
+      {onClose && (
+        <button onClick={onClose} aria-label="Ocultar tips" title="Ocultar tips" style={{
+          background: "none", border: "none", cursor: "pointer", color: colors.inkSoft,
+          fontSize: 16, lineHeight: 1, padding: 4, flexShrink: 0,
+        }}>✕</button>
+      )}
     </Card>
+  );
+}
+
+// Cuántas pantallas de carga están mostrando un tip ahora mismo, para que la
+// barra inferior se oculte y no aparezcan dos tips a la vez.
+const loadingTips = {
+  count: 0, listeners: new Set(),
+  change(delta) {
+    this.count += delta;
+    this.listeners.forEach((l) => l(this.count > 0));
+  },
+};
+
+// Barra fija en la parte inferior con un tip que cambia cada
+// TIP_BAR_ROTATE_MS. Se oculta mientras el micrófono está activo (para no
+// distraer mientras hablas), mientras una carga ya muestra un tip, o si el
+// usuario la cierra (hasta volver a abrir la app).
+const TIP_BAR_ROTATE_MS = 20000;
+function TipBar() {
+  const { showLoadingTips } = React.useContext(PrefsContext);
+  const micActive = useMicActive();
+  const [loadingTipShown, setLoadingTipShown] = useState(loadingTips.count > 0);
+  const [dismissed, setDismissed] = useState(false);
+  const [tip, setTip] = useState(() => nextTip());
+
+  useEffect(() => {
+    loadingTips.listeners.add(setLoadingTipShown);
+    setLoadingTipShown(loadingTips.count > 0);
+    return () => { loadingTips.listeners.delete(setLoadingTipShown); };
+  }, []);
+
+  const visible = showLoadingTips && !dismissed && !micActive && !loadingTipShown && !!tip;
+  useEffect(() => {
+    if (!visible) return;
+    const t = setInterval(() => setTip(nextTip()), TIP_BAR_ROTATE_MS);
+    return () => clearInterval(t);
+  }, [visible]);
+
+  if (!visible) return null;
+  return (
+    <>
+      <div aria-hidden="true" style={{ height: 60 }} />
+      <div style={{
+        position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 25, pointerEvents: "none",
+        padding: "0 12px calc(12px + env(safe-area-inset-bottom, 0px))",
+      }}>
+        <TipCard tip={tip} onClose={() => setDismissed(true)} style={{
+          maxWidth: 640, margin: "0 auto", padding: "12px 14px", pointerEvents: "auto",
+          boxShadow: "0 8px 24px rgba(22,48,43,.12)",
+        }} />
+      </div>
+    </>
   );
 }
 
@@ -284,6 +342,13 @@ function LoadingPanel({ label = "Cargando…", error, onRetry, compact }) {
     }, TIP_DELAY_MS);
     return () => { clearTimeout(show); clearInterval(rotate); };
   }, [error, showLoadingTips]);
+
+  const showingTip = showLoadingTips && !error && !!tip;
+  useEffect(() => {
+    if (!showingTip) return;
+    loadingTips.change(1);
+    return () => loadingTips.change(-1);
+  }, [showingTip]);
 
   const wrap = { maxWidth: 480, margin: "0 auto", padding: compact ? "4px 0" : "48px 24px", textAlign: "center" };
   if (error) {
@@ -3312,9 +3377,11 @@ function ExperienceCard({ showLoadingTips, onToggleTips, tipsError }) {
   return (
     <Card style={{ marginBottom: 18 }}>
       <div style={{ fontFamily: font, fontWeight: 700, color: colors.ink, marginBottom: 14 }}>Ajustes de la experiencia</div>
-      <ToggleRow checked={showLoadingTips} onChange={onToggleTips} title="Mostrar tips durante las cargas">
-        Mientras se prepara una actividad aparece un consejo breve sobre
-        comunicación, práctica o uso de Speaksy. Nunca alarga la espera.
+      <ToggleRow checked={showLoadingTips} onChange={onToggleTips} title="Mostrar tips">
+        Consejos breves sobre comunicación, práctica o uso de Speaksy: en la
+        parte de abajo de la pantalla (cambian cada 20 segundos y se ocultan
+        mientras el micrófono está activo) y durante las cargas, sin alargar
+        nunca la espera.
       </ToggleRow>
       {tipsError && <div style={{ marginTop: 10 }}><Note tone="danger">{tipsError}</Note></div>}
 
@@ -3895,6 +3962,7 @@ function LoggedInApp({ authUser }) {
       {page === "levels-conversation" && <LevelsPage uid={authUser.uid} areaKey="conversation" goBack={() => setPage("curso-conversation")} onSaved={refresh} />}
       {page === "levels-articulation" && <LevelsPage uid={authUser.uid} areaKey="articulation" goBack={() => setPage("curso-articulation")} onSaved={refresh} />}
       {page === "profile" && <ProfilePage uid={authUser.uid} profile={profile} onSaved={refresh} />}
+      <TipBar />
     </div>
     </PrefsContext.Provider>
   );
